@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  AGENT
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
+}
+
+enum AdminPermission {
+  MANAGE_USERS
+  MANAGE_DEPOSITS
+  MANAGE_LOCATIONS
+  VIEW_ANALYTICS
+  MANAGE_ADMINS
+  SYSTEM_SETTINGS
+}
+
+enum DepositStatus {
+  PENDING
+  IN_PROGRESS
+  REJECTED
+  CREDITED
+}
+
+enum TransactionType {
+  DEPOSIT
+  AIRTIME
+  DATA
+  TRANSFER
+  CABLE
+  ELECTRICITY
+  DEBIT
+  CREDIT
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+type Geometry {
+  type        String
+  coordinates Float[]
+}
+
+type CustomLocation {
+  address  String
+  geometry Geometry
+}
+
+model User {
+  id                  String           @id @default(auto()) @map("_id") @db.ObjectId
+  fullName            String
+  email               String           @unique
+  phoneNumber         String           @unique
+  passwordHash        String
+  transactionPinHash  String?
+  countryId           String?          @db.ObjectId
+  stateId             String?          @db.ObjectId
+  pickupLocation      String?
+  registrationStage   Int              @default(1)
+  pointBalance        Int              @default(0)
+  role                UserRole         @default(USER)
+  isEmailVerified     Boolean          @default(false)
+  isActive            Boolean          @default(true)
+  lastLoginAt         DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  country             Country?         @relation(fields: [countryId], references: [id])
+  state               State?           @relation(fields: [stateId], references: [id])
+  deposits            DepositRequest[]
+  transactions        Transaction[]
+
+  @@index([role])
+  @@index([isActive])
+}
+
+model Admin {
+  id             String            @id @default(auto()) @map("_id") @db.ObjectId
+  fullName       String
+  email          String            @unique
+  username       String            @unique
+  passwordHash   String
+  role           AdminRole         @default(ADMIN)
+  permissions    AdminPermission[]
+  isActive       Boolean           @default(true)
+  avatar         String?
+  lastLoginAt    DateTime?
+  loginAttempts  Int               @default(0)
+  lockedUntil    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  processed      DepositRequest[]
+
+  @@index([role])
+  @@index([isActive])
+}
+
+model Country {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String   @unique
+  code        String   @unique
+  currency    String
+  phoneCode   String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  states      State[]
+  areas       Area[]
+  users       User[]
+
+  @@index([isActive])
+}
+
+model State {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  code        String
+  countryId   String   @db.ObjectId
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  country     Country  @relation(fields: [countryId], references: [id])
+  areas       Area[]
+  users       User[]
+
+  @@unique([name, countryId])
+  @@unique([code, countryId])
+  @@index([isActive])
+}
+
+model Area {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  code        String
+  stateId     String           @db.ObjectId
+  countryId   String           @db.ObjectId
+  postalCode  String?
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  state       State            @relation(fields: [stateId], references: [id])
+  country     Country          @relation(fields: [countryId], references: [id])
+  deposits    DepositRequest[]
+
+  @@unique([name, stateId])
+  @@unique([code, stateId])
+  @@index([isActive])
+}
+
+model Item {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  name        String           @unique
+  description String
+  weightKg    Float
+  pointValue  Int
+  imageUrl    String
+  imageId     String?
+  imageTwoUrl String?
+  imageTwoId  String?
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deposits    DepositRequest[]
+
+  @@index([isActive])
+}
+
+model DepositRequest {
+  id             String          @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String          @db.ObjectId
+  itemId         String          @db.ObjectId
+  locationId     String?         @db.ObjectId
+  customLocation CustomLocation?
+  itemName       String
+  weightKg       Float
+  pointValue     Int
+  imageUrl       String
+  imageId        String?
+  status         DepositStatus   @default(PENDING)
+  adminNote      String?
+  processedById  String?         @db.ObjectId
+  processedAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  user           User            @relation(fields: [userId], references: [id])
+  item           Item            @relation(fields: [itemId], references: [id])
+  location       Area?           @relation(fields: [locationId], references: [id])
+  processedBy    Admin?          @relation(fields: [processedById], references: [id])
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+model Transaction {
+  id            String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String            @db.ObjectId
+  type          TransactionType
+  amount        Int
+  fee           Int               @default(0)
+  status        TransactionStatus @default(PENDING)
+  reference     String            @unique
+  description   String
+  metadata      Json?
+  balanceBefore Int
+  balanceAfter  Int
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  user          User              @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@index([type])
+}
+
+model EmailVerification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String
+  otpHash   String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+}
