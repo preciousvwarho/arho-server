@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { paginationMeta } from '../../common/types/pagination';
 import { PrismaService } from '../../database/prisma.service';
+import type { UploadedImage } from '../uploads/uploads.service';
 import { CreateDepositDto } from './dto/create-deposit.dto';
 import { ListDepositsQuery } from './dto/list-deposits.query';
 
@@ -8,12 +9,22 @@ import { ListDepositsQuery } from './dto/list-deposits.query';
 export class DepositsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(userId: string, dto: CreateDepositDto) {
+  async create(
+    userId: string,
+    dto: CreateDepositDto,
+    uploadedImage?: UploadedImage,
+  ) {
     if (!dto.locationId && !dto.customLocation) {
       throw new BadRequestException(
         'Provide a pickup area or a custom location',
       );
     }
+    const imageUrl = uploadedImage?.url ?? dto.imageUrl;
+    const imageId = uploadedImage?.publicId ?? dto.imageId;
+    if (!imageUrl) {
+      throw new BadRequestException('Provide an image upload or imageUrl');
+    }
+
     const item = await this.prisma.item.findUniqueOrThrow({
       where: { id: dto.itemId, isActive: true },
     });
@@ -26,8 +37,8 @@ export class DepositsService {
         itemName: item.name,
         weightKg: item.weightKg,
         pointValue: item.pointValue,
-        imageUrl: dto.imageUrl,
-        imageId: dto.imageId,
+        imageUrl,
+        imageId,
       },
       include: { item: true, location: true },
     });

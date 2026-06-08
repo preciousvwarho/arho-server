@@ -1,15 +1,20 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { compare } from 'bcryptjs';
+import { Admin, AdminPermission, AdminRole } from '@prisma/client';
+import { compare, hash } from 'bcryptjs';
 import { paginationMeta, PaginationQuery } from '../../common/types/pagination';
 import { generateReference } from '../../common/utils/generate-reference';
 import { PrismaService } from '../../database/prisma.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
-import { CreateItemDto } from './dto/create-item.dto';
+import { ChangeAdminPasswordDto } from './dto/change-admin-password.dto';
+import { CreateAdminDto } from './dto/create-admin.dto';
+import { ListUsersQuery } from './dto/list-users.query';
+import { UpdateAdminDto } from './dto/update-admin.dto';
 import { UpdateDepositStatusDto } from './dto/update-deposit-status.dto';
 
 @Injectable()
@@ -36,22 +41,107 @@ export class AdminsService {
       data: { lastLoginAt: new Date(), loginAttempts: 0, lockedUntil: null },
     });
     const token = await this.jwt.signAsync({ sub: admin.id, type: 'admin' });
-    const profile = {
-      id: admin.id,
-      fullName: admin.fullName,
-      email: admin.email,
-      username: admin.username,
-      role: admin.role,
-      permissions: admin.permissions,
-      isActive: admin.isActive,
-      avatar: admin.avatar,
-      lastLoginAt: admin.lastLoginAt,
-    };
-    return { status: 'success', token, data: { admin: profile } };
+    return { status: 'success', token, data: { admin: this.toProfile(admin) } };
   }
 
-  createItem(dto: CreateItemDto) {
-    return this.prisma.item.create({ data: dto });
+  async getMe(id: string) {
+    return this.toProfile(
+      await this.prisma.admin.findUniqueOrThrow({ where: { id } }),
+    );
+  }
+
+  async changePassword(id: string, dto: ChangeAdminPasswordDto) {
+    const admin = await this.prisma.admin.findUniqueOrThrow({ where: { id } });
+    if (!(await compare(dto.currentPassword, admin.passwordHash))) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+    await this.prisma.admin.update({
+      where: { id },
+      data: { passwordHash: await hash(dto.newPassword, 12) },
+    });
+    return { status: 'success', message: 'Password changed successfully' };
+  }
+
+  async createAdmin(dto: CreateAdminDto) {
+    const email = dto.email.toLowerCase();
+    const existing = await this.prisma.admin.findFirst({
+      where: { OR: [{ email }, { username: dto.username }] },
+    });
+    if (existing) {
+      throw new ConflictException('Admin email or username already exists');
+    }
+
+    const role = dto.role ?? AdminRole.ADMIN;
+    const admin = await this.prisma.admin.create({
+      data: {
+        fullName: dto.fullName,
+        email,
+        username: dto.username,
+        passwordHash: await hash(dto.password, 12),
+        role,
+        permissions: dto.permissions ?? this.defaultPermissions(role),
+      },
+    });
+    return this.toProfile(admin);
+  }
+
+  async listAdmins(query: PaginationQuery) {
+    const [admins, total] = await Promise.all([
+      this.prisma.admin.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      this.prisma.admin.count(),
+    ]);
+    return {
+      admins: admins.map((admin) => this.toProfile(admin)),
+      pagination: paginationMeta(query.page, query.limit, total),
+    };
+  }
+
+  async getAdmin(id: string) {
+    return this.toProfile(
+      await this.prisma.admin.findUniqueOrThrow({ where: { id } }),
+    );
+  }
+
+  async updateAdmin(id: string, dto: UpdateAdminDto) {
+    const role = dto.role;
+    const admin = await this.prisma.admin.update({
+      where: { id },
+      data: {
+        fullName: dto.fullName,
+        email: dto.email?.toLowerCase(),
+        username: dto.username,
+        role,
+        permissions:
+          dto.permissions ?? (role ? this.defaultPermissions(role) : undefined),
+        ...(dto.password ? { passwordHash: await hash(dto.password, 12) } : {}),
+      },
+    });
+    return this.toProfile(admin);
+  }
+
+  async deleteAdmin(actorId: string, id: string) {
+    if (actorId === id) {
+      throw new BadRequestException('You cannot delete your own admin account');
+    }
+    return this.toProfile(await this.prisma.admin.delete({ where: { id } }));
+  }
+
+  async toggleAdminStatus(actorId: string, id: string) {
+    if (actorId === id) {
+      throw new BadRequestException(
+        'You cannot deactivate your own admin account',
+      );
+    }
+    const admin = await this.prisma.admin.findUniqueOrThrow({ where: { id } });
+    const updated = await this.prisma.admin.update({
+      where: { id },
+      data: { isActive: !admin.isActive },
+    });
+    return this.toProfile(updated);
   }
 
   async listDeposits(query: PaginationQuery) {
@@ -118,5 +208,142 @@ export class AdminsService {
       });
       return updated;
     });
+  }
+
+  async listUsers(query: ListUsersQuery) {
+    const where = {
+      ...(query.role ? { role: query.role } : {}),
+      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
+    };
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          phoneNumber: true,
+          pointBalance: true,
+          role: true,
+          isEmailVerified: true,
+          isActive: true,
+          createdAt: true,
+          country: true,
+          state: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+    return {
+      users,
+      pagination: paginationMeta(query.page, query.limit, total),
+    };
+  }
+
+  async toggleUserStatus(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+    });
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { isActive: !user.isActive },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phoneNumber: true,
+        pointBalance: true,
+        role: true,
+        isActive: true,
+      },
+    });
+  }
+
+  async getSystemStats() {
+    const [
+      totalUsers,
+      activeUsers,
+      pendingDeposits,
+      totalDeposits,
+      totalTransactions,
+      totalPoints,
+      totalItems,
+      activeItems,
+      totalAdmins,
+    ] = await Promise.all([
+      this.prisma.user.count(),
+      this.prisma.user.count({ where: { isActive: true } }),
+      this.prisma.depositRequest.count({ where: { status: 'PENDING' } }),
+      this.prisma.depositRequest.count(),
+      this.prisma.transaction.count(),
+      this.prisma.user.aggregate({ _sum: { pointBalance: true } }),
+      this.prisma.item.count(),
+      this.prisma.item.count({ where: { isActive: true } }),
+      this.prisma.admin.count(),
+    ]);
+    return {
+      users: {
+        total: totalUsers,
+        active: activeUsers,
+        inactive: totalUsers - activeUsers,
+      },
+      deposits: {
+        total: totalDeposits,
+        pending: pendingDeposits,
+        processed: totalDeposits - pendingDeposits,
+      },
+      transactions: { total: totalTransactions },
+      items: { total: totalItems, active: activeItems },
+      admins: { total: totalAdmins },
+      system: {
+        totalPointsInCirculation: totalPoints._sum.pointBalance ?? 0,
+      },
+    };
+  }
+
+  private defaultPermissions(role: AdminRole) {
+    switch (role) {
+      case AdminRole.SUPER_ADMIN:
+        return [
+          AdminPermission.MANAGE_USERS,
+          AdminPermission.MANAGE_DEPOSITS,
+          AdminPermission.MANAGE_LOCATIONS,
+          AdminPermission.VIEW_ANALYTICS,
+          AdminPermission.MANAGE_ADMINS,
+          AdminPermission.SYSTEM_SETTINGS,
+        ];
+      case AdminRole.MODERATOR:
+        return [
+          AdminPermission.MANAGE_DEPOSITS,
+          AdminPermission.VIEW_ANALYTICS,
+        ];
+      case AdminRole.ADMIN:
+      default:
+        return [
+          AdminPermission.MANAGE_USERS,
+          AdminPermission.MANAGE_DEPOSITS,
+          AdminPermission.MANAGE_LOCATIONS,
+          AdminPermission.VIEW_ANALYTICS,
+        ];
+    }
+  }
+
+  private toProfile(admin: Admin) {
+    return {
+      id: admin.id,
+      fullName: admin.fullName,
+      email: admin.email,
+      username: admin.username,
+      role: admin.role,
+      permissions: admin.permissions,
+      isActive: admin.isActive,
+      avatar: admin.avatar,
+      lastLoginAt: admin.lastLoginAt,
+      createdAt: admin.createdAt,
+      updatedAt: admin.updatedAt,
+    };
   }
 }

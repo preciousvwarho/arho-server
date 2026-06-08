@@ -4,6 +4,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import type { JwtPayload } from '../../common/types/authenticated-request';
 import { AuthService } from './auth.service';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { CreatePinDto, UpdatePinDto } from './dto/pin.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -21,6 +22,11 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
+  }
+
+  @Post('google')
+  googleLogin(@Body() dto: GoogleLoginDto) {
+    return this.auth.googleLogin(dto);
   }
 
   @Post('pin')

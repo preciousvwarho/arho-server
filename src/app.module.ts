@@ -10,6 +10,9 @@ import { LocationsModule } from './modules/locations/locations.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { UsersModule } from './modules/users/users.module';
 import { AdminsModule } from './modules/admins/admins.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
+import { EmailVerificationModule } from './modules/email-verification/email-verification.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -22,6 +25,9 @@ import { AdminsModule } from './modules/admins/admins.module';
     DepositsModule,
     TransactionsModule,
     AdminsModule,
+    UploadsModule,
+    EmailVerificationModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

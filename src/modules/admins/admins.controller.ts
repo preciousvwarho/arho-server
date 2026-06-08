@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -18,7 +19,10 @@ import type { JwtPayload } from '../../common/types/authenticated-request';
 import { PaginationQuery } from '../../common/types/pagination';
 import { AdminsService } from './admins.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
-import { CreateItemDto } from './dto/create-item.dto';
+import { ChangeAdminPasswordDto } from './dto/change-admin-password.dto';
+import { CreateAdminDto } from './dto/create-admin.dto';
+import { ListUsersQuery } from './dto/list-users.query';
+import { UpdateAdminDto } from './dto/update-admin.dto';
 import { UpdateDepositStatusDto } from './dto/update-deposit-status.dto';
 
 @ApiTags('admin')
@@ -31,14 +35,124 @@ export class AdminsController {
     return this.admins.login(dto);
   }
 
-  @Post('items')
+  @Post('auth/logout')
+  logout() {
+    return { status: 'success', message: 'Admin logged out successfully' };
+  }
+
+  @Get('auth/me')
   @ApiBearerAuth()
-  @Permissions(AdminPermission.MANAGE_DEPOSITS)
-  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
-  async createItem(@Body() dto: CreateItemDto) {
+  @UseGuards(AdminJwtAuthGuard)
+  async getMe(@CurrentUser() admin: JwtPayload) {
     return {
       status: 'success',
-      data: { item: await this.admins.createItem(dto) },
+      data: { admin: await this.admins.getMe(admin.sub) },
+    };
+  }
+
+  @Patch('auth/change-password')
+  @ApiBearerAuth()
+  @UseGuards(AdminJwtAuthGuard)
+  changePassword(
+    @CurrentUser() admin: JwtPayload,
+    @Body() dto: ChangeAdminPasswordDto,
+  ) {
+    return this.admins.changePassword(admin.sub, dto);
+  }
+
+  @Post('admins')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.MANAGE_ADMINS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async createAdmin(@Body() dto: CreateAdminDto) {
+    return {
+      status: 'success',
+      data: { admin: await this.admins.createAdmin(dto) },
+    };
+  }
+
+  @Get('admins')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.MANAGE_ADMINS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async listAdmins(@Query() query: PaginationQuery) {
+    return { status: 'success', data: await this.admins.listAdmins(query) };
+  }
+
+  @Get('admins/:id')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.MANAGE_ADMINS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async getAdmin(@Param('id') id: string) {
+    return {
+      status: 'success',
+      data: { admin: await this.admins.getAdmin(id) },
+    };
+  }
+
+  @Patch('admins/:id')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.MANAGE_ADMINS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async updateAdmin(@Param('id') id: string, @Body() dto: UpdateAdminDto) {
+    return {
+      status: 'success',
+      data: { admin: await this.admins.updateAdmin(id, dto) },
+    };
+  }
+
+  @Patch('admins/:id/toggle-status')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.MANAGE_ADMINS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async toggleAdminStatus(
+    @CurrentUser() admin: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return {
+      status: 'success',
+      data: { admin: await this.admins.toggleAdminStatus(admin.sub, id) },
+    };
+  }
+
+  @Delete('admins/:id')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.MANAGE_ADMINS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async deleteAdmin(@CurrentUser() admin: JwtPayload, @Param('id') id: string) {
+    return {
+      status: 'success',
+      data: { admin: await this.admins.deleteAdmin(admin.sub, id) },
+    };
+  }
+
+  @Get('users')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.MANAGE_USERS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async listUsers(@Query() query: ListUsersQuery) {
+    return { status: 'success', data: await this.admins.listUsers(query) };
+  }
+
+  @Patch('users/:userId/toggle-status')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.MANAGE_USERS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async toggleUserStatus(@Param('userId') userId: string) {
+    return {
+      status: 'success',
+      data: { user: await this.admins.toggleUserStatus(userId) },
+    };
+  }
+
+  @Get('stats')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.VIEW_ANALYTICS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async getSystemStats() {
+    return {
+      status: 'success',
+      data: { stats: await this.admins.getSystemStats() },
     };
   }
 

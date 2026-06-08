@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { paginationMeta } from '../../common/types/pagination';
 import { PrismaService } from '../../database/prisma.service';
+import { CreateItemDto } from '../admins/dto/create-item.dto';
+import type { UploadedImage } from '../uploads/uploads.service';
 import { ListItemsQuery } from './dto/list-items.query';
+import { UpdateItemDto } from './dto/update-item.dto';
 
 @Injectable()
 export class ItemsService {
@@ -31,5 +34,47 @@ export class ItemsService {
 
   get(id: string) {
     return this.prisma.item.findUniqueOrThrow({ where: { id } });
+  }
+
+  create(dto: CreateItemDto, image?: UploadedImage, imageTwo?: UploadedImage) {
+    return this.prisma.item.create({
+      data: {
+        ...dto,
+        imageUrl: image?.url ?? dto.imageUrl,
+        imageId: image?.publicId ?? dto.imageId,
+        imageTwoUrl: imageTwo?.url ?? dto.imageTwoUrl,
+        imageTwoId: imageTwo?.publicId ?? dto.imageTwoId,
+      },
+    });
+  }
+
+  update(
+    id: string,
+    dto: UpdateItemDto,
+    image?: UploadedImage,
+    imageTwo?: UploadedImage,
+  ) {
+    return this.prisma.item.update({
+      where: { id },
+      data: {
+        ...dto,
+        imageUrl: image?.url ?? dto.imageUrl,
+        imageId: image?.publicId ?? dto.imageId,
+        imageTwoUrl: imageTwo?.url ?? dto.imageTwoUrl,
+        imageTwoId: imageTwo?.publicId ?? dto.imageTwoId,
+      },
+    });
+  }
+
+  async toggleStatus(id: string) {
+    const item = await this.prisma.item.findUniqueOrThrow({ where: { id } });
+    return this.prisma.item.update({
+      where: { id },
+      data: { isActive: !item.isActive },
+    });
+  }
+
+  delete(id: string) {
+    return this.prisma.item.delete({ where: { id } });
   }
 }

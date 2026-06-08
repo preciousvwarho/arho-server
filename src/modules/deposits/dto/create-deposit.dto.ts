@@ -48,9 +48,10 @@ export class CreateDepositDto {
   @Type(() => CustomLocationDto)
   customLocation?: CustomLocationDto;
 
-  @ApiProperty({ description: 'Uploaded Cloudinary image URL' })
+  @ApiPropertyOptional({ description: 'Uploaded Cloudinary image URL' })
+  @IsOptional()
   @IsUrl()
-  imageUrl: string;
+  imageUrl?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
