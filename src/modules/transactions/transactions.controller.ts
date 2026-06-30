@@ -20,6 +20,7 @@ export class TransactionsController {
   ) {
     return {
       status: 'success',
+      message: 'Transactions retrieved successfully',
       data: await this.transactions.listMine(user.sub, query),
     };
   }
@@ -28,6 +29,7 @@ export class TransactionsController {
   async getMine(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return {
       status: 'success',
+      message: 'Transaction retrieved successfully',
       data: { transaction: await this.transactions.getMine(user.sub, id) },
     };
   }

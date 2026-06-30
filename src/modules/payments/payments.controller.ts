@@ -17,83 +17,131 @@ export class PaymentsController {
 
   @Get('network-providers')
   getNetworkProviders() {
-    return { status: 'success', data: this.payments.getNetworkProviders() };
+    return {
+      status: 'success',
+      message: 'Network providers retrieved successfully',
+      data: { providers: this.payments.getNetworkProviders() },
+    };
   }
 
   @Get('data-plans/:network')
-  getDataPlans(@Param('network') network: string) {
-    return this.payments.getDataPlans(network);
+  async getDataPlans(@Param('network') network: string) {
+    return {
+      status: 'success',
+      message: 'Data plans retrieved successfully',
+      data: { plans: await this.payments.getDataPlans(network) },
+    };
   }
 
   @Get('cable-providers')
   getCableProviders() {
-    return { status: 'success', data: this.payments.getCableProviders() };
+    return {
+      status: 'success',
+      message: 'Cable providers retrieved successfully',
+      data: { providers: this.payments.getCableProviders() },
+    };
   }
 
   @Get('cable-packages/:provider')
-  getCablePackages(@Param('provider') provider: string) {
-    return this.payments.getCablePackages(provider);
+  async getCablePackages(@Param('provider') provider: string) {
+    return {
+      status: 'success',
+      message: 'Cable packages retrieved successfully',
+      data: { packages: await this.payments.getCablePackages(provider) },
+    };
   }
 
   @Get('electricity-providers')
   getElectricityProviders() {
-    return { status: 'success', data: this.payments.getElectricityProviders() };
+    return {
+      status: 'success',
+      message: 'Electricity providers retrieved successfully',
+      data: { providers: this.payments.getElectricityProviders() },
+    };
   }
 
   @Get('banks')
-  getBanks() {
-    return this.payments.getBanks();
+  async getBanks() {
+    return {
+      status: 'success',
+      message: 'Banks retrieved successfully',
+      data: { banks: await this.payments.getBanks() },
+    };
   }
 
   @Post('airtime')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Buy airtime with wallet points' })
-  buyAirtime(@CurrentUser() user: JwtPayload, @Body() dto: BuyAirtimeDto) {
-    return this.payments.buyAirtime(user.sub, dto);
+  async buyAirtime(@CurrentUser() user: JwtPayload, @Body() dto: BuyAirtimeDto) {
+    return {
+      status: 'success',
+      message: 'Airtime purchased successfully',
+      data: { transaction: await this.payments.buyAirtime(user.sub, dto) },
+    };
   }
 
   @Post('data')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  buyData(@CurrentUser() user: JwtPayload, @Body() dto: BuyDataDto) {
-    return this.payments.buyData(user.sub, dto);
+  async buyData(@CurrentUser() user: JwtPayload, @Body() dto: BuyDataDto) {
+    return {
+      status: 'success',
+      message: 'Data purchased successfully',
+      data: { transaction: await this.payments.buyData(user.sub, dto) },
+    };
   }
 
   @Post('cable-tv')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  buyCable(@CurrentUser() user: JwtPayload, @Body() dto: BuyCableDto) {
-    return this.payments.buyCable(user.sub, dto);
+  async buyCable(@CurrentUser() user: JwtPayload, @Body() dto: BuyCableDto) {
+    return {
+      status: 'success',
+      message: 'Cable subscription purchased successfully',
+      data: { transaction: await this.payments.buyCable(user.sub, dto) },
+    };
   }
 
   @Post('electricity')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  buyElectricity(
+  async buyElectricity(
     @CurrentUser() user: JwtPayload,
     @Body() dto: BuyElectricityDto,
   ) {
-    return this.payments.buyElectricity(user.sub, dto);
+    return {
+      status: 'success',
+      message: 'Electricity purchased successfully',
+      data: { transaction: await this.payments.buyElectricity(user.sub, dto) },
+    };
   }
 
   @Post('initiate-transfer')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  initiateTransfer(
+  async initiateTransfer(
     @CurrentUser() user: JwtPayload,
     @Body() dto: InitiateTransferDto,
   ) {
-    return this.payments.initiateTransfer(user.sub, dto);
+    return {
+      status: 'success',
+      message: 'Transfer initiated successfully',
+      data: await this.payments.initiateTransfer(user.sub, dto),
+    };
   }
 
   @Post('transfer')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  completeTransfer(
+  async completeTransfer(
     @CurrentUser() user: JwtPayload,
     @Body() dto: CompleteTransferDto,
   ) {
-    return this.payments.completeTransfer(user.sub, dto);
+    return {
+      status: 'success',
+      message: 'Transfer completed successfully',
+      data: { transaction: await this.payments.completeTransfer(user.sub, dto) },
+    };
   }
 }

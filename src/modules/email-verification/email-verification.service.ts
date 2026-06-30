@@ -52,11 +52,7 @@ export class EmailVerificationService {
     });
 
     await this.deliverOtp(email, otp, dto.fullName);
-    return {
-      status: 'success',
-      message: 'OTP sent successfully',
-      data: { email, expiresIn: '10 minutes' },
-    };
+    return { email, expiresIn: '10 minutes' };
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
@@ -102,11 +98,7 @@ export class EmailVerificationService {
       this.prisma.emailVerification.delete({ where: { id: otpRecord.id } }),
     ]);
 
-    return {
-      status: 'success',
-      message: 'Email verified successfully',
-      data: { email, isEmailVerified: true },
-    };
+    return { email, isEmailVerified: true };
   }
 
   private generateOtp() {

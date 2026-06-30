@@ -29,6 +29,7 @@ export class LocationsController {
   async listCountries() {
     return {
       status: 'success',
+      message: 'Countries retrieved successfully',
       data: { countries: await this.locations.listCountries() },
     };
   }
@@ -38,6 +39,7 @@ export class LocationsController {
   async listStates(@Param('countryId') countryId: string) {
     return {
       status: 'success',
+      message: 'States retrieved successfully',
       data: { states: await this.locations.listStates(countryId) },
     };
   }
@@ -47,6 +49,7 @@ export class LocationsController {
   async listAreas(@Param('stateId') stateId: string) {
     return {
       status: 'success',
+      message: 'Pickup areas retrieved successfully',
       data: { areas: await this.locations.listAreas(stateId) },
     };
   }
@@ -58,6 +61,7 @@ export class LocationsController {
   async createCountry(@Body() dto: CreateCountryDto) {
     return {
       status: 'success',
+      message: 'Country created successfully',
       data: { country: await this.locations.createCountry(dto) },
     };
   }
@@ -69,6 +73,7 @@ export class LocationsController {
   async getCountry(@Param('id') id: string) {
     return {
       status: 'success',
+      message: 'Country retrieved successfully',
       data: { country: await this.locations.getCountry(id) },
     };
   }
@@ -80,6 +85,7 @@ export class LocationsController {
   async updateCountry(@Param('id') id: string, @Body() dto: UpdateCountryDto) {
     return {
       status: 'success',
+      message: 'Country updated successfully',
       data: { country: await this.locations.updateCountry(id, dto) },
     };
   }
@@ -91,6 +97,7 @@ export class LocationsController {
   async deleteCountry(@Param('id') id: string) {
     return {
       status: 'success',
+      message: 'Country deleted successfully',
       data: { country: await this.locations.deleteCountry(id) },
     };
   }
@@ -102,6 +109,7 @@ export class LocationsController {
   async listAllStates(@Query('countryId') countryId?: string) {
     return {
       status: 'success',
+      message: 'States retrieved successfully',
       data: { states: await this.locations.listAllStates(countryId) },
     };
   }
@@ -113,6 +121,7 @@ export class LocationsController {
   async createState(@Body() dto: CreateStateDto) {
     return {
       status: 'success',
+      message: 'State created successfully',
       data: { state: await this.locations.createState(dto) },
     };
   }
@@ -124,6 +133,7 @@ export class LocationsController {
   async getState(@Param('id') id: string) {
     return {
       status: 'success',
+      message: 'State retrieved successfully',
       data: { state: await this.locations.getState(id) },
     };
   }
@@ -135,6 +145,7 @@ export class LocationsController {
   async updateState(@Param('id') id: string, @Body() dto: UpdateStateDto) {
     return {
       status: 'success',
+      message: 'State updated successfully',
       data: { state: await this.locations.updateState(id, dto) },
     };
   }
@@ -146,6 +157,7 @@ export class LocationsController {
   async deleteState(@Param('id') id: string) {
     return {
       status: 'success',
+      message: 'State deleted successfully',
       data: { state: await this.locations.deleteState(id) },
     };
   }
@@ -160,6 +172,7 @@ export class LocationsController {
   ) {
     return {
       status: 'success',
+      message: 'Pickup areas retrieved successfully',
       data: { areas: await this.locations.listAllAreas(stateId, countryId) },
     };
   }
@@ -171,6 +184,7 @@ export class LocationsController {
   async createArea(@Body() dto: CreateAreaDto) {
     return {
       status: 'success',
+      message: 'Pickup area created successfully',
       data: { area: await this.locations.createArea(dto) },
     };
   }
@@ -182,6 +196,7 @@ export class LocationsController {
   async getArea(@Param('id') id: string) {
     return {
       status: 'success',
+      message: 'Pickup area retrieved successfully',
       data: { area: await this.locations.getArea(id) },
     };
   }
@@ -193,6 +208,7 @@ export class LocationsController {
   async updateArea(@Param('id') id: string, @Body() dto: UpdateAreaDto) {
     return {
       status: 'success',
+      message: 'Pickup area updated successfully',
       data: { area: await this.locations.updateArea(id, dto) },
     };
   }
@@ -204,6 +220,7 @@ export class LocationsController {
   async deleteArea(@Param('id') id: string) {
     return {
       status: 'success',
+      message: 'Pickup area deleted successfully',
       data: { area: await this.locations.deleteArea(id) },
     };
   }

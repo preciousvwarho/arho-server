@@ -39,6 +39,10 @@ export class UploadsController {
   })
   async uploadImage(@UploadedFile() file: Express.Multer.File) {
     const image = await this.uploads.uploadImage(file.buffer, 'uploads');
-    return { status: 'success', data: { image } };
+    return {
+      status: 'success',
+      message: 'Image uploaded successfully',
+      data: { image },
+    };
   }
 }

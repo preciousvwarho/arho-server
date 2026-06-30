@@ -11,19 +11,31 @@ export class EmailVerificationController {
 
   @Post('send-otp')
   @ApiOperation({ summary: 'Send an email verification OTP' })
-  sendOtp(@Body() dto: SendOtpDto) {
-    return this.emailVerification.sendOtp(dto);
+  async sendOtp(@Body() dto: SendOtpDto) {
+    return {
+      status: 'success',
+      message: 'OTP sent successfully',
+      data: await this.emailVerification.sendOtp(dto),
+    };
   }
 
   @Post('resend-otp')
   @ApiOperation({ summary: 'Resend an email verification OTP' })
-  resendOtp(@Body() dto: SendOtpDto) {
-    return this.emailVerification.sendOtp(dto);
+  async resendOtp(@Body() dto: SendOtpDto) {
+    return {
+      status: 'success',
+      message: 'OTP resent successfully',
+      data: await this.emailVerification.sendOtp(dto),
+    };
   }
 
   @Post('verify-otp')
   @ApiOperation({ summary: 'Verify an email OTP' })
-  verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.emailVerification.verifyOtp(dto);
+  async verifyOtp(@Body() dto: VerifyOtpDto) {
+    return {
+      status: 'success',
+      message: 'Email verified successfully',
+      data: await this.emailVerification.verifyOtp(dto),
+    };
   }
 }

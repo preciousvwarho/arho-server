@@ -77,6 +77,7 @@ export class DepositsController {
       : undefined;
     return {
       status: 'success',
+      message: 'Deposit request submitted successfully',
       data: {
         deposit: await this.deposits.create(user.sub, dto, uploadedImage),
       },
@@ -90,19 +91,25 @@ export class DepositsController {
   ) {
     return {
       status: 'success',
+      message: 'Deposit requests retrieved successfully',
       data: await this.deposits.listMine(user.sub, query),
     };
   }
 
   @Get('stats')
   async stats(@CurrentUser() user: JwtPayload) {
-    return { status: 'success', data: await this.deposits.getStats(user.sub) };
+    return {
+      status: 'success',
+      message: 'Deposit statistics retrieved successfully',
+      data: await this.deposits.getStats(user.sub),
+    };
   }
 
   @Get(':id')
   async getMine(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return {
       status: 'success',
+      message: 'Deposit request retrieved successfully',
       data: { deposit: await this.deposits.getMine(user.sub, id) },
     };
   }

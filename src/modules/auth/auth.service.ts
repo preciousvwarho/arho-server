@@ -87,14 +87,11 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
       return {
-        status: 'success',
         requiresRegistration: true,
-        data: {
-          profile: {
-            fullName: payload?.name,
-            email,
-            avatar: payload?.picture,
-          },
+        profile: {
+          fullName: payload?.name,
+          email,
+          avatar: payload?.picture,
         },
       };
     }
@@ -125,10 +122,7 @@ export class AuthService {
         registrationStage: 2,
       },
     });
-    return {
-      status: 'success',
-      message: 'Transaction PIN created successfully',
-    };
+    return null;
   }
 
   async updatePin(userId: string, dto: UpdatePinDto) {
@@ -146,10 +140,7 @@ export class AuthService {
       where: { id: userId },
       data: { transactionPinHash: await this.hashSecret(dto.newPin) },
     });
-    return {
-      status: 'success',
-      message: 'Transaction PIN updated successfully',
-    };
+    return null;
   }
 
   async verifyPin(userId: string, pin: string) {
@@ -183,7 +174,7 @@ export class AuthService {
         state: true,
       },
     });
-    return { status: 'success', token, data: { user } };
+    return { token, user };
   }
 
   private hashSecret(value: string) {

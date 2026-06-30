@@ -46,13 +46,21 @@ export class ItemsController {
   @Get()
   @ApiOperation({ summary: 'List recyclable item types' })
   async list(@Query() query: ListItemsQuery) {
-    return { status: 'success', data: await this.items.list(query) };
+    return {
+      status: 'success',
+      message: 'Recyclable items retrieved successfully',
+      data: await this.items.list(query),
+    };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a recyclable item type' })
   async get(@Param('id') id: string) {
-    return { status: 'success', data: { item: await this.items.get(id) } };
+    return {
+      status: 'success',
+      message: 'Recyclable item retrieved successfully',
+      data: { item: await this.items.get(id) },
+    };
   }
 
   @Post()
@@ -97,6 +105,7 @@ export class ItemsController {
       : undefined;
     return {
       status: 'success',
+      message: 'Recyclable item created successfully',
       data: { item: await this.items.create(dto, image, imageTwo) },
     };
   }
@@ -128,6 +137,7 @@ export class ItemsController {
       : undefined;
     return {
       status: 'success',
+      message: 'Recyclable item updated successfully',
       data: { item: await this.items.update(id, dto, image, imageTwo) },
     };
   }
@@ -139,6 +149,7 @@ export class ItemsController {
   async toggleStatus(@Param('id') id: string) {
     return {
       status: 'success',
+      message: 'Recyclable item status updated successfully',
       data: { item: await this.items.toggleStatus(id) },
     };
   }
@@ -148,6 +159,10 @@ export class ItemsController {
   @Permissions(AdminPermission.MANAGE_DEPOSITS)
   @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
   async delete(@Param('id') id: string) {
-    return { status: 'success', data: { item: await this.items.delete(id) } };
+    return {
+      status: 'success',
+      message: 'Recyclable item deleted successfully',
+      data: { item: await this.items.delete(id) },
+    };
   }
 }

@@ -31,8 +31,12 @@ export class AdminsController {
   constructor(private readonly admins: AdminsService) {}
 
   @Post('auth/login')
-  login(@Body() dto: AdminLoginDto) {
-    return this.admins.login(dto);
+  async login(@Body() dto: AdminLoginDto) {
+    return {
+      status: 'success',
+      message: 'Admin logged in successfully',
+      data: await this.admins.login(dto),
+    };
   }
 
   @Post('auth/logout')
@@ -46,6 +50,7 @@ export class AdminsController {
   async getMe(@CurrentUser() admin: JwtPayload) {
     return {
       status: 'success',
+      message: 'Admin profile retrieved successfully',
       data: { admin: await this.admins.getMe(admin.sub) },
     };
   }
@@ -53,11 +58,15 @@ export class AdminsController {
   @Patch('auth/change-password')
   @ApiBearerAuth()
   @UseGuards(AdminJwtAuthGuard)
-  changePassword(
+  async changePassword(
     @CurrentUser() admin: JwtPayload,
     @Body() dto: ChangeAdminPasswordDto,
   ) {
-    return this.admins.changePassword(admin.sub, dto);
+    return {
+      status: 'success',
+      message: 'Admin password changed successfully',
+      data: await this.admins.changePassword(admin.sub, dto),
+    };
   }
 
   @Post('admins')
@@ -67,6 +76,7 @@ export class AdminsController {
   async createAdmin(@Body() dto: CreateAdminDto) {
     return {
       status: 'success',
+      message: 'Admin created successfully',
       data: { admin: await this.admins.createAdmin(dto) },
     };
   }
@@ -76,7 +86,11 @@ export class AdminsController {
   @Permissions(AdminPermission.MANAGE_ADMINS)
   @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
   async listAdmins(@Query() query: PaginationQuery) {
-    return { status: 'success', data: await this.admins.listAdmins(query) };
+    return {
+      status: 'success',
+      message: 'Admins retrieved successfully',
+      data: await this.admins.listAdmins(query),
+    };
   }
 
   @Get('admins/:id')
@@ -86,6 +100,7 @@ export class AdminsController {
   async getAdmin(@Param('id') id: string) {
     return {
       status: 'success',
+      message: 'Admin retrieved successfully',
       data: { admin: await this.admins.getAdmin(id) },
     };
   }
@@ -97,6 +112,7 @@ export class AdminsController {
   async updateAdmin(@Param('id') id: string, @Body() dto: UpdateAdminDto) {
     return {
       status: 'success',
+      message: 'Admin updated successfully',
       data: { admin: await this.admins.updateAdmin(id, dto) },
     };
   }
@@ -111,6 +127,7 @@ export class AdminsController {
   ) {
     return {
       status: 'success',
+      message: 'Admin status updated successfully',
       data: { admin: await this.admins.toggleAdminStatus(admin.sub, id) },
     };
   }
@@ -122,6 +139,7 @@ export class AdminsController {
   async deleteAdmin(@CurrentUser() admin: JwtPayload, @Param('id') id: string) {
     return {
       status: 'success',
+      message: 'Admin deleted successfully',
       data: { admin: await this.admins.deleteAdmin(admin.sub, id) },
     };
   }
@@ -131,7 +149,11 @@ export class AdminsController {
   @Permissions(AdminPermission.MANAGE_USERS)
   @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
   async listUsers(@Query() query: ListUsersQuery) {
-    return { status: 'success', data: await this.admins.listUsers(query) };
+    return {
+      status: 'success',
+      message: 'Users retrieved successfully',
+      data: await this.admins.listUsers(query),
+    };
   }
 
   @Patch('users/:userId/toggle-status')
@@ -141,6 +163,7 @@ export class AdminsController {
   async toggleUserStatus(@Param('userId') userId: string) {
     return {
       status: 'success',
+      message: 'User status updated successfully',
       data: { user: await this.admins.toggleUserStatus(userId) },
     };
   }
@@ -152,6 +175,7 @@ export class AdminsController {
   async getSystemStats() {
     return {
       status: 'success',
+      message: 'System statistics retrieved successfully',
       data: { stats: await this.admins.getSystemStats() },
     };
   }
@@ -161,7 +185,11 @@ export class AdminsController {
   @Permissions(AdminPermission.MANAGE_DEPOSITS)
   @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
   async listDeposits(@Query() query: PaginationQuery) {
-    return { status: 'success', data: await this.admins.listDeposits(query) };
+    return {
+      status: 'success',
+      message: 'Deposit requests retrieved successfully',
+      data: await this.admins.listDeposits(query),
+    };
   }
 
   @Patch('deposits/:id/status')
@@ -175,6 +203,7 @@ export class AdminsController {
   ) {
     return {
       status: 'success',
+      message: 'Deposit request processed successfully',
       data: { deposit: await this.admins.processDeposit(admin.sub, id, dto) },
     };
   }

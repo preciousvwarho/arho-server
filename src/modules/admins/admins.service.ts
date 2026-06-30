@@ -41,7 +41,7 @@ export class AdminsService {
       data: { lastLoginAt: new Date(), loginAttempts: 0, lockedUntil: null },
     });
     const token = await this.jwt.signAsync({ sub: admin.id, type: 'admin' });
-    return { status: 'success', token, data: { admin: this.toProfile(admin) } };
+    return { token, admin: this.toProfile(admin) };
   }
 
   async getMe(id: string) {
@@ -59,7 +59,7 @@ export class AdminsService {
       where: { id },
       data: { passwordHash: await hash(dto.newPassword, 12) },
     });
-    return { status: 'success', message: 'Password changed successfully' };
+    return null;
   }
 
   async createAdmin(dto: CreateAdminDto) {

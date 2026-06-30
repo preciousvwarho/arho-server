@@ -17,6 +17,7 @@ export class UsersController {
   async getMe(@CurrentUser() user: JwtPayload) {
     return {
       status: 'success',
+      message: 'User profile retrieved successfully',
       data: { user: await this.users.getProfile(user.sub) },
     };
   }
@@ -28,6 +29,7 @@ export class UsersController {
   ) {
     return {
       status: 'success',
+      message: 'User profile updated successfully',
       data: { user: await this.users.updateProfile(user.sub, dto) },
     };
   }

@@ -15,31 +15,51 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.auth.register(dto);
+  async register(@Body() dto: RegisterDto) {
+    return {
+      status: 'success',
+      message: 'User registered successfully',
+      data: await this.auth.register(dto),
+    };
   }
 
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto);
+  async login(@Body() dto: LoginDto) {
+    return {
+      status: 'success',
+      message: 'User logged in successfully',
+      data: await this.auth.login(dto),
+    };
   }
 
   @Post('google')
-  googleLogin(@Body() dto: GoogleLoginDto) {
-    return this.auth.googleLogin(dto);
+  async googleLogin(@Body() dto: GoogleLoginDto) {
+    return {
+      status: 'success',
+      message: 'Google login processed successfully',
+      data: await this.auth.googleLogin(dto),
+    };
   }
 
   @Post('pin')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  createPin(@CurrentUser() user: JwtPayload, @Body() dto: CreatePinDto) {
-    return this.auth.createPin(user.sub, dto);
+  async createPin(@CurrentUser() user: JwtPayload, @Body() dto: CreatePinDto) {
+    return {
+      status: 'success',
+      message: 'Transaction PIN created successfully',
+      data: await this.auth.createPin(user.sub, dto),
+    };
   }
 
   @Post('pin/update')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  updatePin(@CurrentUser() user: JwtPayload, @Body() dto: UpdatePinDto) {
-    return this.auth.updatePin(user.sub, dto);
+  async updatePin(@CurrentUser() user: JwtPayload, @Body() dto: UpdatePinDto) {
+    return {
+      status: 'success',
+      message: 'Transaction PIN updated successfully',
+      data: await this.auth.updatePin(user.sub, dto),
+    };
   }
 }
