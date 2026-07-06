@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { CreatePinDto, UpdatePinDto } from './dto/pin.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('auth')
@@ -38,6 +39,24 @@ export class AuthController {
       status: 'success',
       message: 'Google login processed successfully',
       data: await this.auth.googleLogin(dto),
+    };
+  }
+
+  @Post('refresh')
+  async refresh(@Body() dto: RefreshTokenDto) {
+    return {
+      status: 'success',
+      message: 'Token refreshed successfully',
+      data: await this.auth.refresh(dto.refreshToken),
+    };
+  }
+
+  @Post('logout')
+  async logout(@Body() dto: RefreshTokenDto) {
+    return {
+      status: 'success',
+      message: 'User logged out successfully',
+      data: await this.auth.logout(dto.refreshToken),
     };
   }
 

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { randomBytes } from 'node:crypto';
 import { compare, hash } from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../../database/prisma.service';
@@ -13,6 +14,14 @@ import { CreatePinDto, UpdatePinDto } from './dto/pin.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+
+type RefreshTokenPayload = {
+  sub: string;
+  sid: string;
+  type: 'refresh';
+};
+
+type TokenTtl = `${number}${'s' | 'm' | 'h' | 'd'}`;
 
 @Injectable()
 export class AuthService {
@@ -107,6 +116,44 @@ export class AuthService {
     return this.authResponse(user.id);
   }
 
+  async refresh(refreshToken: string) {
+    const payload = await this.verifyRefreshToken(refreshToken);
+    const session = await this.prisma.refreshSession.findUnique({
+      where: { id: payload.sid },
+      include: { user: true },
+    });
+    if (
+      !session ||
+      session.userId !== payload.sub ||
+      session.revokedAt ||
+      session.expiresAt <= new Date() ||
+      !session.user.isActive ||
+      !(await compare(refreshToken, session.tokenHash))
+    ) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    await this.prisma.refreshSession.update({
+      where: { id: session.id },
+      data: { revokedAt: new Date(), rotatedAt: new Date() },
+    });
+
+    return this.authResponse(session.userId);
+  }
+
+  async logout(refreshToken: string) {
+    const payload = await this.verifyRefreshToken(refreshToken);
+    await this.prisma.refreshSession.updateMany({
+      where: {
+        id: payload.sid,
+        userId: payload.sub,
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date() },
+    });
+    return null;
+  }
+
   async createPin(userId: string, dto: CreatePinDto) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -157,7 +204,11 @@ export class AuthService {
   }
 
   private async authResponse(userId: string) {
-    const token = await this.jwt.signAsync({ sub: userId, type: 'user' });
+    const accessToken = await this.jwt.signAsync(
+      { sub: userId, type: 'user' },
+      { expiresIn: this.accessTokenTtl },
+    );
+    const refreshToken = await this.createRefreshToken(userId);
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: {
@@ -174,10 +225,75 @@ export class AuthService {
         state: true,
       },
     });
-    return { token, user };
+    return { accessToken, refreshToken, token: accessToken, user };
   }
 
   private hashSecret(value: string) {
     return hash(value, this.config.get<number>('BCRYPT_ROUNDS', 12));
+  }
+
+  private async createRefreshToken(userId: string) {
+    const sessionId = randomBytes(12).toString('hex');
+    const refreshToken = await this.jwt.signAsync(
+      { sub: userId, sid: sessionId, type: 'refresh' },
+      { expiresIn: this.refreshTokenTtl },
+    );
+
+    await this.prisma.refreshSession.create({
+      data: {
+        id: sessionId,
+        userId,
+        tokenHash: await this.hashSecret(refreshToken),
+        expiresAt: this.dateFromNow(this.refreshTokenTtl),
+      },
+    });
+
+    return refreshToken;
+  }
+
+  private async verifyRefreshToken(refreshToken: string) {
+    try {
+      const payload = await this.jwt.verifyAsync<RefreshTokenPayload>(
+        refreshToken,
+        {
+          secret: this.config.getOrThrow<string>('JWT_SECRET'),
+        },
+      );
+      if (payload.type !== 'refresh' || !payload.sid || !payload.sub) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+      return payload;
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+  }
+
+  private get accessTokenTtl(): TokenTtl {
+    return this.config.get<TokenTtl>(
+      'JWT_ACCESS_EXPIRES_IN',
+      this.config.get<TokenTtl>('JWT_EXPIRES_IN', '15m'),
+    );
+  }
+
+  private get refreshTokenTtl(): TokenTtl {
+    return this.config.get<TokenTtl>('JWT_REFRESH_EXPIRES_IN', '30d');
+  }
+
+  private dateFromNow(ttl: TokenTtl) {
+    const match = ttl.match(/^(\d+)([smhd])$/);
+    if (!match) {
+      throw new Error(`Unsupported token TTL format: ${ttl}`);
+    }
+
+    const value = Number(match[1]);
+    const unit = match[2];
+    const multipliers: Record<string, number> = {
+      s: 1000,
+      m: 60 * 1000,
+      h: 60 * 60 * 1000,
+      d: 24 * 60 * 60 * 1000,
+    };
+
+    return new Date(Date.now() + value * multipliers[unit]);
   }
 }
