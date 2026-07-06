@@ -19,9 +19,11 @@ import type { JwtPayload } from '../../common/types/authenticated-request';
 import { PaginationQuery } from '../../common/types/pagination';
 import { AdminsService } from './admins.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
+import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import { ChangeAdminPasswordDto } from './dto/change-admin-password.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { ListUsersQuery } from './dto/list-users.query';
+import { SchedulePickupDto } from './dto/schedule-pickup.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
 import { UpdateDepositStatusDto } from './dto/update-deposit-status.dto';
 
@@ -205,6 +207,45 @@ export class AdminsController {
       status: 'success',
       message: 'Deposit request processed successfully',
       data: { deposit: await this.admins.processDeposit(admin.sub, id, dto) },
+    };
+  }
+
+  @Patch('deposits/:id/schedule-pickup')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.MANAGE_DEPOSITS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async schedulePickup(
+    @Param('id') id: string,
+    @Body() dto: SchedulePickupDto,
+  ) {
+    return {
+      status: 'success',
+      message: 'Pickup scheduled successfully',
+      data: { deposit: await this.admins.schedulePickup(id, dto) },
+    };
+  }
+
+  @Patch('deposits/:id/arrived')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.MANAGE_DEPOSITS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async markPickupArrived(@Param('id') id: string) {
+    return {
+      status: 'success',
+      message: 'Pickup arrival recorded successfully',
+      data: { deposit: await this.admins.markPickupArrived(id) },
+    };
+  }
+
+  @Post('notifications/broadcast')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.SYSTEM_SETTINGS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async broadcastNotification(@Body() dto: BroadcastNotificationDto) {
+    return {
+      status: 'success',
+      message: 'Notification broadcast queued successfully',
+      data: await this.admins.broadcastNotification(dto),
     };
   }
 }

@@ -14,6 +14,13 @@ type NotifyUserArgs = {
   push?: boolean;
 };
 
+type BroadcastArgs = {
+  title: string;
+  message: string;
+  userIds?: string[];
+  data?: Prisma.InputJsonObject;
+};
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -58,6 +65,30 @@ export class NotificationsService {
     await this.notifyUser(args).catch((error: unknown) => {
       this.logger.error('Unable to create notification', error);
     });
+  }
+
+  async broadcast(args: BroadcastArgs) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        ...(args.userIds?.length ? { id: { in: args.userIds } } : {}),
+      },
+      select: { id: true },
+    });
+
+    await Promise.all(
+      users.map((user) =>
+        this.notifyUserSafely({
+          userId: user.id,
+          type: NotificationType.GENERAL,
+          title: args.title,
+          message: args.message,
+          data: args.data,
+        }),
+      ),
+    );
+
+    return { sent: users.length };
   }
 
   async listMine(userId: string, query: ListNotificationsQuery) {

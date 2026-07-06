@@ -5,6 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AdminJwtAuthGuard } from '../../common/guards/admin-jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { QueuesModule } from '../../queues/queues.module';
 import { AdminJwtStrategy } from './admin-jwt.strategy';
 import { AdminsController } from './admins.controller';
 import { AdminsService } from './admins.service';
@@ -13,6 +14,7 @@ import { AdminsService } from './admins.service';
   imports: [
     PassportModule,
     NotificationsModule,
+    QueuesModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

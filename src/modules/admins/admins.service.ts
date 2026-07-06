@@ -15,11 +15,14 @@ import { compare, hash } from 'bcryptjs';
 import { paginationMeta, PaginationQuery } from '../../common/types/pagination';
 import { generateReference } from '../../common/utils/generate-reference';
 import { PrismaService } from '../../database/prisma.service';
+import { QueuesService } from '../../queues/queues.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
+import { BroadcastNotificationDto } from './dto/broadcast-notification.dto';
 import { ChangeAdminPasswordDto } from './dto/change-admin-password.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { ListUsersQuery } from './dto/list-users.query';
+import { SchedulePickupDto } from './dto/schedule-pickup.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
 import { UpdateDepositStatusDto } from './dto/update-deposit-status.dto';
 
@@ -29,6 +32,7 @@ export class AdminsService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly notifications: NotificationsService,
+    private readonly queues: QueuesService,
   ) {}
 
   async login(dto: AdminLoginDto) {
@@ -241,6 +245,74 @@ export class AdminsService {
     }
 
     return updated;
+  }
+
+  async schedulePickup(id: string, dto: SchedulePickupDto) {
+    const deposit = await this.prisma.depositRequest.update({
+      where: { id },
+      data: { scheduledPickupAt: dto.scheduledPickupAt },
+      include: { user: true, item: true, location: true },
+    });
+
+    await this.notifications.notifyUserSafely({
+      userId: deposit.userId,
+      type: NotificationType.PICKUP_REMINDER,
+      title: 'Pickup scheduled',
+      message: `Your ${deposit.itemName} pickup has been scheduled for ${dto.scheduledPickupAt.toISOString()}.`,
+      data: {
+        depositRequestId: deposit.id,
+        scheduledPickupAt: dto.scheduledPickupAt.toISOString(),
+        itemName: deposit.itemName,
+      },
+    });
+
+    const reminderAt = new Date(dto.scheduledPickupAt.getTime() - 24 * 60 * 60 * 1000);
+    if (reminderAt > new Date()) {
+      await this.queues
+        .enqueuePickupReminder({
+          userId: deposit.userId,
+          depositRequestId: deposit.id,
+          scheduledPickupAt: reminderAt.toISOString(),
+          itemName: deposit.itemName,
+        })
+        .catch(() => undefined);
+    }
+
+    return deposit;
+  }
+
+  async markPickupArrived(id: string) {
+    const deposit = await this.prisma.depositRequest.update({
+      where: { id },
+      data: {
+        pickupArrivedAt: new Date(),
+        status: 'IN_PROGRESS',
+      },
+      include: { user: true, item: true, location: true },
+    });
+
+    await this.notifications.notifyUserSafely({
+      userId: deposit.userId,
+      type: NotificationType.PICKUP_ARRIVAL,
+      title: 'Pickup team has arrived',
+      message: `Our team has arrived at your pickup location for ${deposit.itemName}.`,
+      data: {
+        depositRequestId: deposit.id,
+        itemName: deposit.itemName,
+        pickupArrivedAt: deposit.pickupArrivedAt?.toISOString(),
+      },
+    });
+
+    return deposit;
+  }
+
+  broadcastNotification(dto: BroadcastNotificationDto) {
+    return this.notifications.broadcast({
+      title: dto.title,
+      message: dto.message,
+      userIds: dto.userIds,
+      data: dto.data,
+    });
   }
 
   async listUsers(query: ListUsersQuery) {

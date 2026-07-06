@@ -226,6 +226,8 @@ model DepositRequest {
   imageId        String?
   status         DepositStatus   @default(PENDING)
   adminNote      String?
+  scheduledPickupAt DateTime?
+  pickupArrivedAt DateTime?
   processedById  String?         @db.ObjectId
   processedAt    DateTime?
   createdAt      DateTime        @default(now())
@@ -237,6 +239,7 @@ model DepositRequest {
 
   @@index([userId, status])
   @@index([status, createdAt])
+  @@index([scheduledPickupAt])
 }
 
 model Transaction {
