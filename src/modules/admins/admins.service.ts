@@ -5,11 +5,17 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Admin, AdminPermission, AdminRole } from '@prisma/client';
+import {
+  Admin,
+  AdminPermission,
+  AdminRole,
+  NotificationType,
+} from '@prisma/client';
 import { compare, hash } from 'bcryptjs';
 import { paginationMeta, PaginationQuery } from '../../common/types/pagination';
 import { generateReference } from '../../common/utils/generate-reference';
 import { PrismaService } from '../../database/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { ChangeAdminPasswordDto } from './dto/change-admin-password.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
@@ -22,6 +28,7 @@ export class AdminsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async login(dto: AdminLoginDto) {
@@ -160,8 +167,12 @@ export class AdminsService {
     };
   }
 
-  processDeposit(adminId: string, id: string, dto: UpdateDepositStatusDto) {
-    return this.prisma.$transaction(async (tx) => {
+  async processDeposit(adminId: string, id: string, dto: UpdateDepositStatusDto) {
+    let creditNotification:
+      | { userId: string; itemName: string; pointValue: number; depositId: string }
+      | undefined;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
       const deposit = await tx.depositRequest.findUniqueOrThrow({
         where: { id },
       });
@@ -206,8 +217,30 @@ export class AdminsService {
           balanceAfter,
         },
       });
+      creditNotification = {
+        userId: user.id,
+        itemName: deposit.itemName,
+        pointValue: deposit.pointValue,
+        depositId: deposit.id,
+      };
       return updated;
     });
+
+    if (creditNotification) {
+      await this.notifications.notifyUserSafely({
+        userId: creditNotification.userId,
+        type: NotificationType.COINS_CREDITED,
+        title: 'Coins credited',
+        message: `${creditNotification.pointValue} coins have been credited for ${creditNotification.itemName}.`,
+        data: {
+          depositRequestId: creditNotification.depositId,
+          itemName: creditNotification.itemName,
+          pointValue: creditNotification.pointValue,
+        },
+      });
+    }
+
+    return updated;
   }
 
   async listUsers(query: ListUsersQuery) {

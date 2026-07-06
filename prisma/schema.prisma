@@ -52,6 +52,16 @@ enum TransactionStatus {
   CANCELLED
 }
 
+enum NotificationType {
+  GENERAL
+  WELCOME
+  DEPOSIT_CREATED
+  BILL_PAYMENT
+  COINS_CREDITED
+  PICKUP_REMINDER
+  PICKUP_ARRIVAL
+}
+
 type Geometry {
   type        String
   coordinates Float[]
@@ -77,6 +87,8 @@ model User {
   role                UserRole         @default(USER)
   isEmailVerified     Boolean          @default(false)
   isActive            Boolean          @default(true)
+  pushToken           String?
+  pushNotificationsEnabled Boolean      @default(true)
   lastLoginAt         DateTime?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
@@ -85,9 +97,11 @@ model User {
   deposits            DepositRequest[]
   transactions        Transaction[]
   refreshSessions     RefreshSession[]
+  notifications       Notification[]
 
   @@index([role])
   @@index([isActive])
+  @@index([pushToken])
 }
 
 model RefreshSession {
@@ -243,6 +257,23 @@ model Transaction {
 
   @@index([userId, createdAt])
   @@index([status])
+  @@index([type])
+}
+
+model Notification {
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String           @db.ObjectId
+  type      NotificationType @default(GENERAL)
+  title     String
+  message   String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
   @@index([type])
 }
 

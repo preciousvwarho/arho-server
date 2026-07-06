@@ -6,11 +6,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
+import { NotificationType, Prisma } from '@prisma/client';
 import axios, { AxiosInstance } from 'axios';
 import { generateReference } from '../../common/utils/generate-reference';
 import { PrismaService } from '../../database/prisma.service';
 import { AuthService } from '../auth/auth.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { BuyAirtimeDto } from './dto/buy-airtime.dto';
 import { BuyCableDto } from './dto/buy-cable.dto';
 import { BuyDataDto } from './dto/buy-data.dto';
@@ -31,6 +32,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auth: AuthService,
+    private readonly notifications: NotificationsService,
     config: ConfigService,
   ) {
     this.vtpass = axios.create({
@@ -242,7 +244,7 @@ export class PaymentsService {
       currency: 'NGN',
     });
 
-    return this.prisma.$transaction(async (tx) => {
+    const completed = await this.prisma.$transaction(async (tx) => {
       const balanceAfter = user.pointBalance - transaction.amount;
       await tx.user.update({
         where: { id: userId },
@@ -258,6 +260,21 @@ export class PaymentsService {
         },
       });
     });
+
+    await this.notifications.notifyUserSafely({
+      userId,
+      type: NotificationType.BILL_PAYMENT,
+      title: 'Transfer completed',
+      message: `Your transfer of ${metadata.transferAmount} points has been completed successfully.`,
+      data: {
+        transactionId: completed.id,
+        reference: completed.reference,
+        amount: completed.amount,
+        type: completed.type,
+      },
+    });
+
+    return completed;
   }
 
   private async walletGatewayPurchase(args: {
@@ -291,7 +308,7 @@ export class PaymentsService {
 
     try {
       const gateway = await this.callVtpass(args.gatewayPayload);
-      return this.prisma.$transaction(async (tx) => {
+      const completed = await this.prisma.$transaction(async (tx) => {
         const balanceAfter = user.pointBalance - args.amount;
         await tx.user.update({
           where: { id: args.userId },
@@ -306,6 +323,19 @@ export class PaymentsService {
           },
         });
       });
+      await this.notifications.notifyUserSafely({
+        userId: args.userId,
+        type: NotificationType.BILL_PAYMENT,
+        title: 'Bill payment successful',
+        message: args.description,
+        data: {
+          transactionId: completed.id,
+          reference: completed.reference,
+          amount: completed.amount,
+          type: completed.type,
+        },
+      });
+      return completed;
     } catch (error) {
       await this.prisma.transaction.update({
         where: { id: transaction.id },

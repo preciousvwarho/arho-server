@@ -6,10 +6,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { NotificationType } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { compare, hash } from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
+import nodemailer from 'nodemailer';
 import { PrismaService } from '../../database/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreatePinDto, UpdatePinDto } from './dto/pin.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
@@ -31,6 +34,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly notifications: NotificationsService,
   ) {
     this.googleClient = new OAuth2Client(
       config.get<string>('GOOGLE_CLIENT_ID'),
@@ -56,6 +60,20 @@ export class AuthService {
         passwordHash: await this.hashSecret(password),
       },
     });
+
+    await Promise.all([
+      this.sendWelcomeEmail(user.email, user.fullName).catch((error: unknown) => {
+        console.error('Unable to send welcome email', error);
+      }),
+      this.notifications.notifyUserSafely({
+        userId: user.id,
+        type: NotificationType.WELCOME,
+        title: 'Welcome to Trash4Cash',
+        message:
+          'Your Trash4Cash account has been created successfully. Start recycling and earning points.',
+        data: { userId: user.id },
+      }),
+    ]);
 
     return this.authResponse(user.id);
   }
@@ -295,5 +313,37 @@ export class AuthService {
     };
 
     return new Date(Date.now() + value * multipliers[unit]);
+  }
+
+  private async sendWelcomeEmail(email: string, fullName: string) {
+    const host = this.config.get<string>('SMTP_HOST');
+    const user = this.config.get<string>('SMTP_USER');
+    const password = this.config.get<string>('SMTP_PASSWORD');
+
+    if (!host || !user || !password) {
+      console.log(`Welcome email for ${email}`);
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port: this.config.get<number>('SMTP_PORT', 587),
+      secure: this.config.get<number>('SMTP_PORT', 587) === 465,
+      auth: { user, pass: password },
+    });
+
+    await transporter.sendMail({
+      from: this.config.get<string>('EMAIL_FROM', 'noreply@trash4cash.com'),
+      to: email,
+      subject: 'Welcome to Trash4Cash',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+          <h2>Welcome to Trash4Cash</h2>
+          <p>Hello ${fullName},</p>
+          <p>Your account has been created successfully.</p>
+          <p>You can now submit recyclable pickup requests and earn points.</p>
+        </div>
+      `,
+    });
   }
 }

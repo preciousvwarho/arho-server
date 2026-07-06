@@ -16,6 +16,7 @@ import { AdminsModule } from './modules/admins/admins.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { EmailVerificationModule } from './modules/email-verification/email-verification.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
     UploadsModule,
     EmailVerificationModule,
     PaymentsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

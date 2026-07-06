@@ -1,13 +1,18 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { NotificationType } from '@prisma/client';
 import { paginationMeta } from '../../common/types/pagination';
 import { PrismaService } from '../../database/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { UploadedImage } from '../uploads/uploads.service';
 import { CreateDepositDto } from './dto/create-deposit.dto';
 import { ListDepositsQuery } from './dto/list-deposits.query';
 
 @Injectable()
 export class DepositsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async create(
     userId: string,
@@ -28,7 +33,7 @@ export class DepositsService {
     const item = await this.prisma.item.findUniqueOrThrow({
       where: { id: dto.itemId, isActive: true },
     });
-    return this.prisma.depositRequest.create({
+    const deposit = await this.prisma.depositRequest.create({
       data: {
         userId,
         itemId: item.id,
@@ -42,6 +47,20 @@ export class DepositsService {
       },
       include: { item: true, location: true },
     });
+
+    await this.notifications.notifyUserSafely({
+      userId,
+      type: NotificationType.DEPOSIT_CREATED,
+      title: 'Deposit request submitted',
+      message: `Your ${deposit.itemName} pickup request has been submitted successfully.`,
+      data: {
+        depositRequestId: deposit.id,
+        itemId: deposit.itemId,
+        itemName: deposit.itemName,
+      },
+    });
+
+    return deposit;
   }
 
   async listMine(userId: string, query: ListDepositsQuery) {
