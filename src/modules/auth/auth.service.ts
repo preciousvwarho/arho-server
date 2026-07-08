@@ -10,7 +10,7 @@ import { NotificationType } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { compare, hash } from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
-import nodemailer from 'nodemailer';
+import { EmailService } from '../../email/email.service';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreatePinDto, UpdatePinDto } from './dto/pin.dto';
@@ -34,6 +34,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly email: EmailService,
     private readonly notifications: NotificationsService,
   ) {
     this.googleClient = new OAuth2Client(
@@ -247,7 +248,7 @@ export class AuthService {
   }
 
   private hashSecret(value: string) {
-    return hash(value, this.config.get<number>('BCRYPT_ROUNDS', 12));
+    return hash(value, this.config.get<number>('BCRYPT_SALT_ROUNDS', 12));
   }
 
   private async createRefreshToken(userId: string) {
@@ -287,10 +288,7 @@ export class AuthService {
   }
 
   private get accessTokenTtl(): TokenTtl {
-    return this.config.get<TokenTtl>(
-      'JWT_ACCESS_EXPIRES_IN',
-      this.config.get<TokenTtl>('JWT_EXPIRES_IN', '15m'),
-    );
+    return this.config.get<TokenTtl>('JWT_EXPIRE', '15m');
   }
 
   private get refreshTokenTtl(): TokenTtl {
@@ -316,26 +314,10 @@ export class AuthService {
   }
 
   private async sendWelcomeEmail(email: string, fullName: string) {
-    const host = this.config.get<string>('SMTP_HOST');
-    const user = this.config.get<string>('SMTP_USER');
-    const password = this.config.get<string>('SMTP_PASSWORD');
-
-    if (!host || !user || !password) {
-      console.log(`Welcome email for ${email}`);
-      return;
-    }
-
-    const transporter = nodemailer.createTransport({
-      host,
-      port: this.config.get<number>('SMTP_PORT', 587),
-      secure: this.config.get<number>('SMTP_PORT', 587) === 465,
-      auth: { user, pass: password },
-    });
-
-    await transporter.sendMail({
-      from: this.config.get<string>('EMAIL_FROM', 'noreply@trash4cash.com'),
+    await this.email.send({
       to: email,
       subject: 'Welcome to Trash4Cash',
+      fallbackMessage: `Welcome email for ${email}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
           <h2>Welcome to Trash4Cash</h2>

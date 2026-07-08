@@ -6,17 +6,19 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { EmailModule } from '../../email/email.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     PassportModule,
+    EmailModule,
     NotificationsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.getOrThrow<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '30d') },
+        signOptions: { expiresIn: config.get('JWT_EXPIRE', '30d') },
       }),
     }),
   ],

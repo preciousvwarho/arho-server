@@ -1,5 +1,6 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import type { JwtPayload } from '../../common/types/authenticated-request';
@@ -16,6 +17,7 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post('register')
+  @Throttle({ default: { limit: 5, ttl: 15 * 60 * 1000 } })
   async register(@Body() dto: RegisterDto) {
     return {
       status: 'success',
@@ -25,6 +27,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Throttle({ default: { limit: 5, ttl: 15 * 60 * 1000 } })
   async login(@Body() dto: LoginDto) {
     return {
       status: 'success',
@@ -34,6 +37,7 @@ export class AuthController {
   }
 
   @Post('google')
+  @Throttle({ default: { limit: 5, ttl: 15 * 60 * 1000 } })
   async googleLogin(@Body() dto: GoogleLoginDto) {
     return {
       status: 'success',

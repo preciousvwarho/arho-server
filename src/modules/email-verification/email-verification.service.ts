@@ -3,12 +3,11 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
-  InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { compare, hash } from 'bcryptjs';
-import nodemailer from 'nodemailer';
 import { randomInt } from 'node:crypto';
+import { EmailService } from '../../email/email.service';
 import { PrismaService } from '../../database/prisma.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -18,6 +17,7 @@ export class EmailVerificationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly email: EmailService,
   ) {}
 
   async sendOtp(dto: SendOtpDto) {
@@ -46,7 +46,10 @@ export class EmailVerificationService {
     await this.prisma.emailVerification.create({
       data: {
         email,
-        otpHash: await hash(otp, this.config.get<number>('BCRYPT_ROUNDS', 12)),
+        otpHash: await hash(
+          otp,
+          this.config.get<number>('BCRYPT_SALT_ROUNDS', 12),
+        ),
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
     });
@@ -110,26 +113,10 @@ export class EmailVerificationService {
   }
 
   private async deliverOtp(email: string, otp: string, fullName?: string) {
-    const host = this.config.get<string>('SMTP_HOST');
-    const user = this.config.get<string>('SMTP_USER');
-    const password = this.config.get<string>('SMTP_PASSWORD');
-
-    if (!host || !user || !password) {
-      console.log(`OTP for ${email}: ${otp}`);
-      return;
-    }
-
-    const transporter = nodemailer.createTransport({
-      host,
-      port: this.config.get<number>('SMTP_PORT', 587),
-      secure: this.config.get<number>('SMTP_PORT', 587) === 465,
-      auth: { user, pass: password },
-    });
-
-    const result = await transporter.sendMail({
-      from: this.config.get<string>('EMAIL_FROM', 'noreply@trash4cash.com'),
+    await this.email.send({
       to: email,
       subject: 'Trash4Cash Email Verification',
+      fallbackMessage: `OTP for ${email}: ${otp}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
           <h2>Email Verification</h2>
@@ -140,9 +127,5 @@ export class EmailVerificationService {
         </div>
       `,
     });
-
-    if (!result.messageId) {
-      throw new InternalServerErrorException('Unable to send OTP email');
-    }
   }
 }

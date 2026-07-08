@@ -1,5 +1,6 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { EmailVerificationService } from './email-verification.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -10,6 +11,7 @@ export class EmailVerificationController {
   constructor(private readonly emailVerification: EmailVerificationService) {}
 
   @Post('send-otp')
+  @Throttle({ default: { limit: 3, ttl: 10 * 60 * 1000 } })
   @ApiOperation({ summary: 'Send an email verification OTP' })
   async sendOtp(@Body() dto: SendOtpDto) {
     return {
@@ -20,6 +22,7 @@ export class EmailVerificationController {
   }
 
   @Post('resend-otp')
+  @Throttle({ default: { limit: 3, ttl: 10 * 60 * 1000 } })
   @ApiOperation({ summary: 'Resend an email verification OTP' })
   async resendOtp(@Body() dto: SendOtpDto) {
     return {
@@ -30,6 +33,7 @@ export class EmailVerificationController {
   }
 
   @Post('verify-otp')
+  @Throttle({ default: { limit: 10, ttl: 10 * 60 * 1000 } })
   @ApiOperation({ summary: 'Verify an email OTP' })
   async verifyOtp(@Body() dto: VerifyOtpDto) {
     return {

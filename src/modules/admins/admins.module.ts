@@ -19,7 +19,7 @@ import { AdminsService } from './admins.service';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.getOrThrow<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '30d') },
+        signOptions: { expiresIn: config.get('JWT_EXPIRE', '30d') },
       }),
     }),
   ],

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -21,6 +22,15 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          ttl: Number(config.get<string>('RATE_LIMIT_WINDOW_MS') || 900000),
+          limit: Number(config.get<string>('RATE_LIMIT_MAX_REQUESTS') || 100),
+        },
+      ],
+    }),
     DatabaseModule,
     AuthModule,
     UsersModule,
@@ -37,6 +47,10 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
   controllers: [AppController],
   providers: [
     AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: ResponseInterceptor,

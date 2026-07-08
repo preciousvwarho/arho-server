@@ -42,7 +42,7 @@ export class PaymentsService {
       ),
       headers: {
         'api-key': config.get<string>('VTPASS_API_KEY'),
-        'secret-key': config.get<string>('VTPASS_SECRET_KEY'),
+        'secret-key': config.get<string>('VTPASS_SECRET'),
       },
     });
     this.flutterwave = axios.create({
