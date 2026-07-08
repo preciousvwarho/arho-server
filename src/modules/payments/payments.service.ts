@@ -2,12 +2,9 @@
 import {
   BadRequestException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { NotificationType, Prisma } from '@prisma/client';
-import axios, { AxiosInstance } from 'axios';
 import { generateReference } from '../../common/utils/generate-reference';
 import { PrismaService } from '../../database/prisma.service';
 import { AuthService } from '../auth/auth.service';
@@ -17,6 +14,7 @@ import { BuyCableDto } from './dto/buy-cable.dto';
 import { BuyDataDto } from './dto/buy-data.dto';
 import { BuyElectricityDto } from './dto/buy-electricity.dto';
 import { CompleteTransferDto, InitiateTransferDto } from './dto/transfer.dto';
+import { PaymentGatewayService } from './payment-gateway.service';
 
 type Variation = {
   variation_code: string;
@@ -26,35 +24,12 @@ type Variation = {
 
 @Injectable()
 export class PaymentsService {
-  private readonly vtpass: AxiosInstance;
-  private readonly flutterwave: AxiosInstance;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly auth: AuthService,
     private readonly notifications: NotificationsService,
-    config: ConfigService,
-  ) {
-    this.vtpass = axios.create({
-      baseURL: config.get<string>(
-        'VTPASS_BASE_URL',
-        'https://sandbox.vtpass.com/api',
-      ),
-      headers: {
-        'api-key': config.get<string>('VTPASS_API_KEY'),
-        'secret-key': config.get<string>('VTPASS_SECRET'),
-      },
-    });
-    this.flutterwave = axios.create({
-      baseURL: config.get<string>(
-        'FLW_BASE_URL',
-        'https://api.flutterwave.com/v3',
-      ),
-      headers: {
-        Authorization: `Bearer ${config.get<string>('FLW_SECRET_KEY') ?? ''}`,
-      },
-    });
-  }
+    private readonly gateway: PaymentGatewayService,
+  ) {}
 
   getNetworkProviders() {
     return [
@@ -91,9 +66,8 @@ export class PaymentsService {
     return this.getVariations(this.cableServiceId(provider));
   }
 
-  async getBanks() {
-    const { data } = await this.flutterwave.get('/banks/NG');
-    return data;
+  getBanks() {
+    return this.gateway.getFlutterwaveBanks();
   }
 
   async buyAirtime(userId: string, dto: BuyAirtimeDto) {
@@ -307,7 +281,7 @@ export class PaymentsService {
     });
 
     try {
-      const gateway = await this.callVtpass(args.gatewayPayload);
+      const gateway = await this.gateway.payWithVtpass(args.gatewayPayload);
       const completed = await this.prisma.$transaction(async (tx) => {
         const balanceAfter = user.pointBalance - args.amount;
         await tx.user.update({
@@ -351,22 +325,8 @@ export class PaymentsService {
     }
   }
 
-  private async callVtpass(payload: Record<string, unknown>) {
-    const { data } = await this.vtpass.post('/pay', payload);
-    const code = data?.code;
-    if (code && code !== '000') {
-      throw new InternalServerErrorException(
-        data?.response_description ?? 'VTPass transaction failed',
-      );
-    }
-    return data;
-  }
-
-  private async getVariations(serviceId: string) {
-    const { data } = await this.vtpass.get('/service-variations', {
-      params: { serviceID: serviceId },
-    });
-    return data?.content?.variations ?? [];
+  private getVariations(serviceId: string) {
+    return this.gateway.getVtpassVariations(serviceId);
   }
 
   private async findVariation(serviceId: string, variationCode: string) {
@@ -407,29 +367,11 @@ export class PaymentsService {
     return 50;
   }
 
-  private async resolveFlutterwaveAccount(
-    accountNumber: string,
-    bankCode: string,
-  ) {
-    const { data } = await this.flutterwave.post('/accounts/resolve', {
-      account_number: accountNumber,
-      account_bank: bankCode,
-    });
-    if (data?.status !== 'success') {
-      throw new BadRequestException(
-        data?.message ?? 'Unable to resolve account',
-      );
-    }
-    return data.data as { account_name: string; account_number: string };
+  private resolveFlutterwaveAccount(accountNumber: string, bankCode: string) {
+    return this.gateway.resolveFlutterwaveAccount(accountNumber, bankCode);
   }
 
-  private async createFlutterwaveTransfer(payload: Record<string, unknown>) {
-    const { data } = await this.flutterwave.post('/transfers', payload);
-    if (data?.status !== 'success') {
-      throw new InternalServerErrorException(
-        data?.message ?? 'Transfer failed',
-      );
-    }
-    return data;
+  private createFlutterwaveTransfer(payload: Record<string, unknown>) {
+    return this.gateway.createFlutterwaveTransfer(payload);
   }
 }

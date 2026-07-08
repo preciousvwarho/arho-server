@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtModule } from '@nestjs/jwt';
+import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AdminJwtAuthGuard } from '../../common/guards/admin-jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
@@ -19,7 +19,10 @@ import { AdminsService } from './admins.service';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.getOrThrow<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get('JWT_EXPIRE', '30d') },
+        signOptions: {
+          expiresIn: (config.get<string>('JWT_EXPIRE') ||
+            '30d') as NonNullable<JwtModuleOptions['signOptions']>['expiresIn'],
+        },
       }),
     }),
   ],

@@ -248,7 +248,10 @@ export class AuthService {
   }
 
   private hashSecret(value: string) {
-    return hash(value, this.config.get<number>('BCRYPT_SALT_ROUNDS', 12));
+    return hash(
+      value,
+      Number(this.config.get<string>('BCRYPT_SALT_ROUNDS') || 12),
+    );
   }
 
   private async createRefreshToken(userId: string) {
@@ -288,11 +291,12 @@ export class AuthService {
   }
 
   private get accessTokenTtl(): TokenTtl {
-    return this.config.get<TokenTtl>('JWT_EXPIRE', '15m');
+    return (this.config.get<string>('JWT_EXPIRE') || '15m') as TokenTtl;
   }
 
   private get refreshTokenTtl(): TokenTtl {
-    return this.config.get<TokenTtl>('JWT_REFRESH_EXPIRES_IN', '30d');
+    return (this.config.get<string>('JWT_REFRESH_EXPIRES_IN') ||
+      '30d') as TokenTtl;
   }
 
   private dateFromNow(ttl: TokenTtl) {

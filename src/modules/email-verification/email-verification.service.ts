@@ -48,7 +48,7 @@ export class EmailVerificationService {
         email,
         otpHash: await hash(
           otp,
-          this.config.get<number>('BCRYPT_SALT_ROUNDS', 12),
+          Number(this.config.get<string>('BCRYPT_SALT_ROUNDS') || 12),
         ),
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
