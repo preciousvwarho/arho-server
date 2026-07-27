@@ -5,12 +5,12 @@ import { NotificationType } from '@prisma/client';
 import { PaginationQuery } from '../../../common/types/pagination';
 
 export class ListNotificationsQuery extends PaginationQuery {
-  @ApiPropertyOptional({ enum: NotificationType })
+  @ApiPropertyOptional({ enum: NotificationType, example: NotificationType.GENERAL })
   @IsOptional()
   @IsEnum(NotificationType)
   type?: NotificationType;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: Boolean, example: false })
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()

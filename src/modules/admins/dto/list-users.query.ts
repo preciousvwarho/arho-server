@@ -5,12 +5,12 @@ import { IsBoolean, IsEnum, IsOptional } from 'class-validator';
 import { PaginationQuery } from '../../../common/types/pagination';
 
 export class ListUsersQuery extends PaginationQuery {
-  @ApiPropertyOptional({ enum: UserRole })
+  @ApiPropertyOptional({ enum: UserRole, example: UserRole.USER })
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: Boolean, example: true })
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()

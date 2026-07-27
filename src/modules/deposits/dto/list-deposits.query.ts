@@ -4,7 +4,7 @@ import { IsEnum, IsOptional } from 'class-validator';
 import { PaginationQuery } from '../../../common/types/pagination';
 
 export class ListDepositsQuery extends PaginationQuery {
-  @ApiPropertyOptional({ enum: DepositStatus })
+  @ApiPropertyOptional({ enum: DepositStatus, example: DepositStatus.PENDING })
   @IsOptional()
   @IsEnum(DepositStatus)
   status?: DepositStatus;

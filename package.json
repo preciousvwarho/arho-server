@@ -21,6 +21,8 @@
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "migrate:legacy-db": "node scripts/migrate-legacy-db.js",
+    "seed:admin": "ts-node prisma/seed-admin.ts",
+    "seed:app-data": "ts-node prisma/seed-app-data.ts",
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {

@@ -3,7 +3,7 @@ import { IsOptional, IsString } from 'class-validator';
 import { PaginationQuery } from '../../../common/types/pagination';
 
 export class ListItemsQuery extends PaginationQuery {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: String, example: 'plastic' })
   @IsOptional()
   @IsString()
   search?: string;

@@ -2,6 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 const apply = process.argv.includes('--apply');
+const cleanup = process.argv.includes('--cleanup');
 
 const roleMap = {
   user: 'USER',
@@ -25,6 +26,25 @@ const depositStatusMap = {
   in_progress: 'IN_PROGRESS',
   rejected: 'REJECTED',
   credited: 'CREDITED',
+};
+
+const cleanupFields = {
+  users: [
+    'password',
+    'transactionPin',
+    'country',
+    'state',
+    'regStage',
+    'lastLogin',
+    'loginType',
+    '__v',
+  ],
+  admins: ['password', 'lastLogin', '__v'],
+  states: ['country', 'createdBy', '__v'],
+  areas: ['state', 'country', 'createdBy', '__v'],
+  items: ['itemName', 'weight', 'amount', 'image', 'imageTwo', '__v'],
+  depositrequests: ['user', 'item', 'location', 'image', '__v'],
+  countries: ['createdBy', '__v'],
 };
 
 function objectIdValue(value) {
@@ -53,6 +73,36 @@ function dateValue(value) {
 function compact(data) {
   return Object.fromEntries(
     Object.entries(data).filter(([, value]) => value !== undefined),
+  );
+}
+
+function sameValue(current, desired) {
+  return JSON.stringify(current ?? null) === JSON.stringify(desired ?? null);
+}
+
+function plannedSet(document, desiredSet) {
+  return Object.fromEntries(
+    Object.entries(desiredSet).filter(
+      ([field, desired]) => !sameValue(document[field], desired),
+    ),
+  );
+}
+
+function hasValidCustomLocation(value) {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  if (typeof value.address !== 'string' || !value.address.trim()) {
+    return false;
+  }
+  if (!value.geometry || typeof value.geometry !== 'object') {
+    return false;
+  }
+  return (
+    value.geometry.type === 'Point' &&
+    Array.isArray(value.geometry.coordinates) &&
+    value.geometry.coordinates.length === 2 &&
+    value.geometry.coordinates.every((coordinate) => typeof coordinate === 'number')
   );
 }
 
@@ -89,13 +139,65 @@ async function updateOne(collection, id, set) {
   return result.nModified ?? result.n ?? 0;
 }
 
+async function unsetOne(collection, id, fields) {
+  if (!fields.length) {
+    return 0;
+  }
+
+  if (!apply) {
+    return 1;
+  }
+
+  const result = await prisma.$runCommandRaw({
+    update: collection,
+    updates: [
+      {
+        q: { _id: id },
+        u: {
+          $unset: Object.fromEntries(fields.map((field) => [field, ''])),
+        },
+      },
+    ],
+  });
+  return result.nModified ?? result.n ?? 0;
+}
+
+async function cleanupCollection(collection, fields) {
+  const documents = await find(collection);
+  let planned = 0;
+  let updated = 0;
+
+  for (const document of documents) {
+    const fieldsToRemove = fields.filter((field) =>
+      Object.prototype.hasOwnProperty.call(document, field),
+    );
+
+    if (fieldsToRemove.length) {
+      planned += 1;
+      updated += await unsetOne(collection, document._id, fieldsToRemove);
+    }
+  }
+
+  return { scanned: documents.length, planned, updated };
+}
+
+async function cleanupLegacyFields() {
+  const result = { mode: apply ? 'cleanup-apply' : 'cleanup-dry-run' };
+
+  for (const [collection, fields] of Object.entries(cleanupFields)) {
+    result[collection] = await cleanupCollection(collection, fields);
+  }
+
+  return result;
+}
+
 async function migrateUsers() {
   const users = await find('users');
   let planned = 0;
   let updated = 0;
 
   for (const user of users) {
-    const set = compact({
+    const set = plannedSet(user, compact({
       passwordHash: user.passwordHash ?? user.password,
       transactionPinHash: user.transactionPinHash ?? user.transactionPin,
       countryId: user.countryId ?? objectIdValue(user.country),
@@ -109,7 +211,7 @@ async function migrateUsers() {
           ? true
           : user.pushNotificationsEnabled,
       lastLoginAt: user.lastLoginAt ?? dateValue(user.lastLogin),
-    });
+    }));
 
     if (Object.keys(set).length) {
       planned += 1;
@@ -126,7 +228,7 @@ async function migrateAdmins() {
   let updated = 0;
 
   for (const admin of admins) {
-    const set = compact({
+    const set = plannedSet(admin, compact({
       passwordHash: admin.passwordHash ?? admin.password,
       role: upperMapped(admin.role, roleMap),
       permissions: Array.isArray(admin.permissions)
@@ -135,7 +237,7 @@ async function migrateAdmins() {
           )
         : undefined,
       lastLoginAt: admin.lastLoginAt ?? dateValue(admin.lastLogin),
-    });
+    }));
 
     if (Object.keys(set).length) {
       planned += 1;
@@ -153,9 +255,9 @@ async function migrateLocations() {
   let updated = 0;
 
   for (const state of states) {
-    const set = compact({
+    const set = plannedSet(state, compact({
       countryId: state.countryId ?? objectIdValue(state.country),
-    });
+    }));
     if (Object.keys(set).length) {
       planned += 1;
       updated += await updateOne('states', state._id, set);
@@ -163,10 +265,10 @@ async function migrateLocations() {
   }
 
   for (const area of areas) {
-    const set = compact({
+    const set = plannedSet(area, compact({
       stateId: area.stateId ?? objectIdValue(area.state),
       countryId: area.countryId ?? objectIdValue(area.country),
-    });
+    }));
     if (Object.keys(set).length) {
       planned += 1;
       updated += await updateOne('areas', area._id, set);
@@ -182,7 +284,7 @@ async function migrateItems() {
   let updated = 0;
 
   for (const item of items) {
-    const set = compact({
+    const set = plannedSet(item, compact({
       name: item.name ?? item.itemName,
       weightKg: item.weightKg ?? item.weight,
       pointValue: item.pointValue ?? item.amount,
@@ -190,7 +292,7 @@ async function migrateItems() {
       imageId: item.imageId ?? item.image?.publicId,
       imageTwoUrl: item.imageTwoUrl ?? item.imageTwo?.url,
       imageTwoId: item.imageTwoId ?? item.imageTwo?.publicId,
-    });
+    }));
 
     if (Object.keys(set).length) {
       planned += 1;
@@ -218,10 +320,24 @@ async function migrateDeposits() {
   for (const deposit of deposits) {
     const itemId = objectIdValue(deposit.itemId ?? deposit.item);
     const item = itemId?.$oid ? itemsById.get(itemId.$oid) : undefined;
-    const set = compact({
+    const hasLocation = Boolean(deposit.locationId ?? deposit.location);
+    const customLocation =
+      deposit.customLocation && !hasValidCustomLocation(deposit.customLocation)
+        ? hasLocation
+          ? null
+          : {
+              address: 'Legacy custom pickup location',
+              geometry: {
+                type: 'Point',
+                coordinates: [],
+              },
+            }
+        : undefined;
+    const set = plannedSet(deposit, compact({
       userId: deposit.userId ?? objectIdValue(deposit.user),
       itemId,
       locationId: deposit.locationId ?? objectIdValue(deposit.location),
+      customLocation,
       weightKg: deposit.weightKg ?? deposit.weight ?? item?.weightKg ?? item?.weight,
       pointValue:
         deposit.pointValue ?? deposit.amount ?? item?.pointValue ?? item?.amount,
@@ -232,7 +348,7 @@ async function migrateDeposits() {
         deposit.processedById ?? objectIdValue(deposit.processedBy),
       pickupArrivedAt:
         deposit.pickupArrivedAt ?? dateValue(deposit.arrivedAt),
-    });
+    }));
 
     if (Object.keys(set).length) {
       planned += 1;
@@ -244,6 +360,17 @@ async function migrateDeposits() {
 }
 
 async function main() {
+  if (cleanup) {
+    const result = await cleanupLegacyFields();
+    console.log(JSON.stringify(result, null, 2));
+    if (!apply) {
+      console.log(
+        'Cleanup dry run only. Re-run with --cleanup --apply to remove legacy fields.',
+      );
+    }
+    return;
+  }
+
   const result = {
     mode: apply ? 'apply' : 'dry-run',
     users: await migrateUsers(),
