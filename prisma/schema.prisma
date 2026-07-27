@@ -102,6 +102,7 @@ model User {
   @@index([role])
   @@index([isActive])
   @@index([pushToken])
+  @@map("users")
 }
 
 model RefreshSession {
@@ -120,6 +121,7 @@ model RefreshSession {
   @@index([userId])
   @@index([expiresAt])
   @@index([revokedAt])
+  @@map("refreshsessions")
 }
 
 model Admin {
@@ -141,6 +143,7 @@ model Admin {
 
   @@index([role])
   @@index([isActive])
+  @@map("admins")
 }
 
 model Country {
@@ -157,6 +160,7 @@ model Country {
   users       User[]
 
   @@index([isActive])
+  @@map("countries")
 }
 
 model State {
@@ -174,6 +178,7 @@ model State {
   @@unique([name, countryId])
   @@unique([code, countryId])
   @@index([isActive])
+  @@map("states")
 }
 
 model Area {
@@ -193,6 +198,7 @@ model Area {
   @@unique([name, stateId])
   @@unique([code, stateId])
   @@index([isActive])
+  @@map("areas")
 }
 
 model Item {
@@ -211,6 +217,7 @@ model Item {
   deposits    DepositRequest[]
 
   @@index([isActive])
+  @@map("items")
 }
 
 model DepositRequest {
@@ -240,6 +247,7 @@ model DepositRequest {
   @@index([userId, status])
   @@index([status, createdAt])
   @@index([scheduledPickupAt])
+  @@map("depositrequests")
 }
 
 model Transaction {
@@ -261,6 +269,7 @@ model Transaction {
   @@index([userId, createdAt])
   @@index([status])
   @@index([type])
+  @@map("transactions")
 }
 
 model Notification {
@@ -278,6 +287,7 @@ model Notification {
   @@index([userId, createdAt])
   @@index([userId, readAt])
   @@index([type])
+  @@map("notifications")
 }
 
 model EmailVerification {
@@ -290,4 +300,5 @@ model EmailVerification {
 
   @@index([email])
   @@index([expiresAt])
+  @@map("emailverifications")
 }
