@@ -31,6 +31,10 @@ type AdminAuthData = {
 describe('Deposit and admin processing smoke flow (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let queuesMock: {
+    enqueuePushNotification: jest.Mock;
+    enqueuePickupReminder: jest.Mock;
+  };
   const suffix = Date.now().toString().slice(-8);
   const itemName = `Smoke PET Bottle ${suffix}`;
   const adminEmail = `smoke-admin-${suffix}@example.com`;
@@ -53,7 +57,7 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
     const emailMock = {
       send: jest.fn().mockResolvedValue(undefined),
     };
-    const queuesMock = {
+    queuesMock = {
       enqueuePushNotification: jest.fn().mockResolvedValue(undefined),
       enqueuePickupReminder: jest.fn().mockResolvedValue(undefined),
     };
@@ -329,6 +333,111 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
           response.data.deposits.some((deposit) => deposit.id === depositId),
         ).toBe(true);
       });
+
+    const pickupDepositResponse = await request(app.getHttpServer())
+      .post('/api/v1/deposits')
+      .set('Authorization', `Bearer ${userAccessToken}`)
+      .send({
+        itemId: item.id,
+        customLocation: {
+          address: '12 Pickup Schedule Street, Lagos',
+          geometry: { type: 'Point', coordinates: [3.3901, 6.5112] },
+        },
+        imageUrl: 'https://example.com/smoke-pickup-schedule.png',
+      })
+      .expect(201);
+    const pickupDepositBody = pickupDepositResponse.body as ApiBody<{
+      deposit: { id: string; status: string };
+    }>;
+    const pickupDepositId = pickupDepositBody.data.deposit.id;
+    const scheduledPickupAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/admin/deposits/${pickupDepositId}/schedule-pickup`)
+      .set('Authorization', `Bearer ${adminLoginBody.data.token}`)
+      .send({
+        scheduledPickupAt: new Date(Date.now() - 60 * 1000).toISOString(),
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        const response = body as ApiBody<null>;
+        expect(response.status).toBe('error');
+        expect(response.message).toBe('Pickup schedule must be in the future');
+      });
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/admin/deposits/${pickupDepositId}/schedule-pickup`)
+      .set('Authorization', `Bearer ${adminLoginBody.data.token}`)
+      .send({ scheduledPickupAt: scheduledPickupAt.toISOString() })
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          deposit: {
+            id: string;
+            scheduledPickupAt: string;
+          };
+        }>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('Pickup scheduled successfully');
+        expect(response.data.deposit.id).toBe(pickupDepositId);
+        expect(
+          new Date(response.data.deposit.scheduledPickupAt).toISOString(),
+        ).toBe(scheduledPickupAt.toISOString());
+      });
+
+    const pickupReminderNotification =
+      await prisma.notification.findFirstOrThrow({
+        where: {
+          userId,
+          type: NotificationType.PICKUP_REMINDER,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    expect(pickupReminderNotification.title).toBe('Pickup scheduled');
+    expect(pickupReminderNotification.data).toEqual(
+      expect.objectContaining({ depositRequestId: pickupDepositId }),
+    );
+    expect(queuesMock.enqueuePickupReminder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId,
+        depositRequestId: pickupDepositId,
+        itemName,
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/admin/deposits/${pickupDepositId}/arrived`)
+      .set('Authorization', `Bearer ${adminLoginBody.data.token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          deposit: {
+            id: string;
+            status: string;
+            pickupArrivedAt: string;
+          };
+        }>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('Pickup arrival recorded successfully');
+        expect(response.data.deposit.id).toBe(pickupDepositId);
+        expect(response.data.deposit.status).toBe('IN_PROGRESS');
+        expect(response.data.deposit.pickupArrivedAt).toEqual(
+          expect.any(String),
+        );
+      });
+
+    const pickupArrivalNotification =
+      await prisma.notification.findFirstOrThrow({
+        where: {
+          userId,
+          type: NotificationType.PICKUP_ARRIVAL,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    expect(pickupArrivalNotification.title).toBe('Pickup team has arrived');
+    expect(pickupArrivalNotification.data).toEqual(
+      expect.objectContaining({ depositRequestId: pickupDepositId }),
+    );
 
     const processResponse = await request(app.getHttpServer())
       .patch(`/api/v1/admin/deposits/${depositId}/status`)

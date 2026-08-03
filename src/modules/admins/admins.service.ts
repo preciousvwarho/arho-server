@@ -171,9 +171,18 @@ export class AdminsService {
     };
   }
 
-  async processDeposit(adminId: string, id: string, dto: UpdateDepositStatusDto) {
+  async processDeposit(
+    adminId: string,
+    id: string,
+    dto: UpdateDepositStatusDto,
+  ) {
     let creditNotification:
-      | { userId: string; itemName: string; pointValue: number; depositId: string }
+      | {
+          userId: string;
+          itemName: string;
+          pointValue: number;
+          depositId: string;
+        }
       | undefined;
 
     const updated = await this.prisma.$transaction(
@@ -251,6 +260,10 @@ export class AdminsService {
   }
 
   async schedulePickup(id: string, dto: SchedulePickupDto) {
+    if (dto.scheduledPickupAt <= new Date()) {
+      throw new BadRequestException('Pickup schedule must be in the future');
+    }
+
     const deposit = await this.prisma.depositRequest.update({
       where: { id },
       data: { scheduledPickupAt: dto.scheduledPickupAt },
@@ -269,7 +282,9 @@ export class AdminsService {
       },
     });
 
-    const reminderAt = new Date(dto.scheduledPickupAt.getTime() - 24 * 60 * 60 * 1000);
+    const reminderAt = new Date(
+      dto.scheduledPickupAt.getTime() - 24 * 60 * 60 * 1000,
+    );
     if (reminderAt > new Date()) {
       await this.queues
         .enqueuePickupReminder({
