@@ -9,7 +9,7 @@ import { PrismaService } from '../src/database/prisma.service';
 import { EmailService } from '../src/email/email.service';
 import { QueuesService } from '../src/queues/queues.service';
 
-jest.setTimeout(30000);
+jest.setTimeout(180000);
 
 type ApiBody<T = unknown> = {
   status: string;
@@ -20,7 +20,7 @@ type ApiBody<T = unknown> = {
 type AuthData = {
   accessToken: string;
   refreshToken: string;
-  user: { id: string; email: string };
+  user: { id: string; email: string; referralCode: string };
 };
 
 type AdminAuthData = {
@@ -40,6 +40,12 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
     fullName: 'Deposit Smoke User',
     email: `deposit-smoke-${suffix}@example.com`,
     phoneNumber: `081${suffix}`,
+    password: 'SecurePass1!',
+  };
+  const referredUser = {
+    fullName: 'Referred Smoke User',
+    email: `referred-smoke-${suffix}@example.com`,
+    phoneNumber: `090${suffix}`,
     password: 'SecurePass1!',
   };
 
@@ -99,7 +105,11 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
         username: adminUsername,
         passwordHash: await hash(adminPassword, 12),
         role: AdminRole.ADMIN,
-        permissions: [AdminPermission.MANAGE_DEPOSITS],
+        permissions: [
+          AdminPermission.MANAGE_ADMINS,
+          AdminPermission.MANAGE_USERS,
+          AdminPermission.MANAGE_DEPOSITS,
+        ],
         isActive: true,
       },
     });
@@ -113,6 +123,97 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
     const registerBody = registerResponse.body as ApiBody<AuthData>;
     const userAccessToken = registerBody.data.accessToken;
     const userId = registerBody.data.user.id;
+    expect(registerBody.data.user.referralCode).toEqual(expect.any(String));
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        ...referredUser,
+        email: `invalid-referral-${suffix}@example.com`,
+        phoneNumber: `091${suffix}`,
+        referralCode: 'INVALIDCODE',
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        const response = body as ApiBody<null>;
+        expect(response.status).toBe('error');
+        expect(response.message).toBe('Invalid referral code');
+      });
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        ...referredUser,
+        referralCode: registerBody.data.user.referralCode,
+      })
+      .expect(201);
+
+    await expect(
+      prisma.referral.findFirstOrThrow({
+        where: { referrerId: userId },
+        select: { status: true, referralCode: true },
+      }),
+    ).resolves.toEqual({
+      status: 'COMPLETED',
+      referralCode: registerBody.data.user.referralCode,
+    });
+
+    await request(app.getHttpServer())
+      .get('/api/v1/items/recycle-categories?page=1&limit=10')
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          categories: Array<{
+            id: string;
+            name: string;
+            weightKg: number;
+            pointValue: number;
+            imageUrl: string;
+            isActive: boolean;
+          }>;
+        }> & {
+          pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            pages: number;
+          };
+        };
+        expect(response.status).toBe('success');
+        expect(response.message).toBe(
+          'Recycle categories retrieved successfully',
+        );
+        expect(response.pagination.total).toBeGreaterThanOrEqual(1);
+        expect(response.data.categories).toContainEqual(
+          expect.objectContaining({
+            id: item.id,
+            name: itemName,
+            weightKg: item.weightKg,
+            pointValue: item.pointValue,
+            imageUrl: item.imageUrl,
+            isActive: true,
+          }),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .get('/api/v1/items?page=1&limit=10')
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          items: Array<{ id: string; name: string }>;
+        }> & {
+          pagination: { total: number };
+        };
+        expect(response.status).toBe('success');
+        expect(response.message).toBe(
+          'Recyclable items retrieved successfully',
+        );
+        expect(response.pagination.total).toBeGreaterThanOrEqual(1);
+        expect(
+          response.data.items.some((listedItem) => listedItem.id === item.id),
+        ).toBe(true);
+      });
 
     const depositResponse = await request(app.getHttpServer())
       .post('/api/v1/deposits')
@@ -149,9 +250,16 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
       .set('Authorization', `Bearer ${userAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        const response = body as ApiBody<{ deposits: Array<{ id: string }> }>;
+        const response = body as ApiBody<{
+          deposits: Array<{ id: string }>;
+        }> & {
+          pagination: { total: number };
+        };
         expect(response.status).toBe('success');
-        expect(response.message).toBe('Deposit requests retrieved successfully');
+        expect(response.message).toBe(
+          'Deposit requests retrieved successfully',
+        );
+        expect(response.pagination.total).toBeGreaterThanOrEqual(1);
         expect(
           response.data.deposits.some((deposit) => deposit.id === depositId),
         ).toBe(true);
@@ -165,6 +273,62 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
     expect(adminLoginBody.data.admin.permissions).toContain(
       AdminPermission.MANAGE_DEPOSITS,
     );
+
+    await request(app.getHttpServer())
+      .get('/api/v1/admin/admins?page=1&limit=10')
+      .set('Authorization', `Bearer ${adminLoginBody.data.token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          admins: Array<{ id: string }>;
+        }> & {
+          pagination: { total: number };
+        };
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('Admins retrieved successfully');
+        expect(response.pagination.total).toBeGreaterThanOrEqual(1);
+        expect(
+          response.data.admins.some((entry) => entry.id === admin.id),
+        ).toBe(true);
+      });
+
+    await request(app.getHttpServer())
+      .get('/api/v1/admin/users?page=1&limit=10')
+      .set('Authorization', `Bearer ${adminLoginBody.data.token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          users: Array<{ id: string }>;
+        }> & {
+          pagination: { total: number };
+        };
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('Users retrieved successfully');
+        expect(response.pagination.total).toBeGreaterThanOrEqual(1);
+        expect(response.data.users.some((entry) => entry.id === userId)).toBe(
+          true,
+        );
+      });
+
+    await request(app.getHttpServer())
+      .get('/api/v1/admin/deposits?page=1&limit=10')
+      .set('Authorization', `Bearer ${adminLoginBody.data.token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          deposits: Array<{ id: string }>;
+        }> & {
+          pagination: { total: number };
+        };
+        expect(response.status).toBe('success');
+        expect(response.message).toBe(
+          'Deposit requests retrieved successfully',
+        );
+        expect(response.pagination.total).toBeGreaterThanOrEqual(1);
+        expect(
+          response.data.deposits.some((deposit) => deposit.id === depositId),
+        ).toBe(true);
+      });
 
     const processResponse = await request(app.getHttpServer())
       .patch(`/api/v1/admin/deposits/${depositId}/status`)
@@ -204,11 +368,58 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
     expect(coinsNotification.data).toEqual(
       expect.objectContaining({ depositRequestId: depositId }),
     );
+
+    await request(app.getHttpServer())
+      .get('/api/v1/users/dashboard')
+      .set('Authorization', `Bearer ${userAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          dashboard: {
+            wallet: {
+              coinsBalance: number;
+              totalCoinsEarned: number;
+              totalRecycled: number;
+              savedCO2: null;
+              referrals: number;
+            };
+            recentDeposits: Array<{ id: string; status: string }>;
+            recentTransactions: Array<{
+              type: string;
+              status: string;
+              amount: number;
+            }>;
+          };
+        }>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('User dashboard retrieved successfully');
+        expect(response.data.dashboard.wallet).toEqual({
+          coinsBalance: item.pointValue,
+          totalCoinsEarned: item.pointValue,
+          totalRecycled: 1,
+          savedCO2: null,
+          referrals: 1,
+        });
+        expect(
+          response.data.dashboard.recentDeposits.some(
+            (deposit) =>
+              deposit.id === depositId && deposit.status === 'CREDITED',
+          ),
+        ).toBe(true);
+        expect(
+          response.data.dashboard.recentTransactions.some(
+            (transaction) =>
+              transaction.type === 'CREDIT' &&
+              transaction.status === 'COMPLETED' &&
+              transaction.amount === item.pointValue,
+          ),
+        ).toBe(true);
+      });
   });
 
   async function cleanupTestData() {
     const users = await prisma.user.findMany({
-      where: { email: testUser.email },
+      where: { email: { in: [testUser.email, referredUser.email] } },
       select: { id: true },
     });
     const userIds = users.map((user) => user.id);
@@ -220,7 +431,15 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
 
     if (userIds.length > 0) {
       await prisma.emailVerification.deleteMany({
-        where: { email: testUser.email },
+        where: { email: { in: [testUser.email, referredUser.email] } },
+      });
+      await prisma.referral.deleteMany({
+        where: {
+          OR: [
+            { referrerId: { in: userIds } },
+            { referredUserId: { in: userIds } },
+          ],
+        },
       });
       await prisma.refreshSession.deleteMany({
         where: { userId: { in: userIds } },

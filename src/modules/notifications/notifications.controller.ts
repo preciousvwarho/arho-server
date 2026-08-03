@@ -1,4 +1,11 @@
-import { Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -18,10 +25,21 @@ export class NotificationsController {
     @CurrentUser() user: JwtPayload,
     @Query() query: ListNotificationsQuery,
   ) {
+    const result = await this.notifications.listMine(user.sub, query);
     return {
       status: 'success',
       message: 'Notifications retrieved successfully',
-      data: await this.notifications.listMine(user.sub, query),
+      data: { notifications: result.notifications },
+      pagination: result.pagination,
+    };
+  }
+
+  @Get('unread-count')
+  async unreadCount(@CurrentUser() user: JwtPayload) {
+    return {
+      status: 'success',
+      message: 'Unread notifications count retrieved successfully',
+      data: await this.notifications.unreadCount(user.sub),
     };
   }
 

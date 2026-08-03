@@ -32,6 +32,39 @@ export class ItemsService {
     };
   }
 
+  async listRecycleCategories(query: ListItemsQuery) {
+    const where = {
+      isActive: true,
+      ...(query.search
+        ? { name: { contains: query.search, mode: 'insensitive' as const } }
+        : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.item.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          weightKg: true,
+          pointValue: true,
+          imageUrl: true,
+          imageTwoUrl: true,
+          isActive: true,
+        },
+      }),
+      this.prisma.item.count({ where }),
+    ]);
+
+    return {
+      categories: items,
+      pagination: paginationMeta(query.page, query.limit, total),
+    };
+  }
+
   get(id: string) {
     return this.prisma.item.findUniqueOrThrow({ where: { id } });
   }

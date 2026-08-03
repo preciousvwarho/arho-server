@@ -176,59 +176,62 @@ export class AdminsService {
       | { userId: string; itemName: string; pointValue: number; depositId: string }
       | undefined;
 
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const deposit = await tx.depositRequest.findUniqueOrThrow({
-        where: { id },
-      });
-      if (deposit.status !== 'PENDING') {
-        throw new BadRequestException(
-          'Deposit request has already been processed',
-        );
-      }
+    const updated = await this.prisma.$transaction(
+      async (tx) => {
+        const deposit = await tx.depositRequest.findUniqueOrThrow({
+          where: { id },
+        });
+        if (deposit.status !== 'PENDING') {
+          throw new BadRequestException(
+            'Deposit request has already been processed',
+          );
+        }
 
-      const updated = await tx.depositRequest.update({
-        where: { id },
-        data: {
-          status: dto.status,
-          adminNote: dto.adminNote,
-          processedById: adminId,
-          processedAt: new Date(),
-        },
-      });
-      if (dto.status === 'REJECTED') return updated;
-
-      const user = await tx.user.findUniqueOrThrow({
-        where: { id: deposit.userId },
-      });
-      const balanceAfter = user.pointBalance + deposit.pointValue;
-      await tx.user.update({
-        where: { id: user.id },
-        data: { pointBalance: balanceAfter },
-      });
-      await tx.transaction.create({
-        data: {
-          userId: user.id,
-          type: 'CREDIT',
-          status: 'COMPLETED',
-          amount: deposit.pointValue,
-          reference: generateReference('DEPOSIT'),
-          description: `Points credited for ${deposit.itemName}`,
-          metadata: {
-            depositRequestId: deposit.id,
-            weightKg: deposit.weightKg,
+        const updated = await tx.depositRequest.update({
+          where: { id },
+          data: {
+            status: dto.status,
+            adminNote: dto.adminNote,
+            processedById: adminId,
+            processedAt: new Date(),
           },
-          balanceBefore: user.pointBalance,
-          balanceAfter,
-        },
-      });
-      creditNotification = {
-        userId: user.id,
-        itemName: deposit.itemName,
-        pointValue: deposit.pointValue,
-        depositId: deposit.id,
-      };
-      return updated;
-    });
+        });
+        if (dto.status === 'REJECTED') return updated;
+
+        const user = await tx.user.findUniqueOrThrow({
+          where: { id: deposit.userId },
+        });
+        const balanceAfter = user.pointBalance + deposit.pointValue;
+        await tx.user.update({
+          where: { id: user.id },
+          data: { pointBalance: balanceAfter },
+        });
+        await tx.transaction.create({
+          data: {
+            userId: user.id,
+            type: 'CREDIT',
+            status: 'COMPLETED',
+            amount: deposit.pointValue,
+            reference: generateReference('DEPOSIT'),
+            description: `Points credited for ${deposit.itemName}`,
+            metadata: {
+              depositRequestId: deposit.id,
+              weightKg: deposit.weightKg,
+            },
+            balanceBefore: user.pointBalance,
+            balanceAfter,
+          },
+        });
+        creditNotification = {
+          userId: user.id,
+          itemName: deposit.itemName,
+          pointValue: deposit.pointValue,
+          depositId: deposit.id,
+        };
+        return updated;
+      },
+      { maxWait: 10000, timeout: 15000 },
+    );
 
     if (creditNotification) {
       await this.notifications.notifyUserSafely({

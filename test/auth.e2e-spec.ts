@@ -2,12 +2,13 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { compare } from 'bcryptjs';
 import { EmailService } from '../src/email/email.service';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 import { QueuesService } from '../src/queues/queues.service';
 
-jest.setTimeout(30000);
+jest.setTimeout(360000);
 
 type ApiBody<T = unknown> = {
   status: string;
@@ -39,6 +40,9 @@ describe('Auth and email smoke flow (e2e)', () => {
     phoneNumber: `080${suffix}`,
     password: 'SecurePass1!',
   };
+  const changedPassword = 'NewSecurePass1!';
+  const resetPassword = 'ResetSecurePass1!';
+  const resetPin = '4321';
 
   beforeAll(async () => {
     const emailMock = {
@@ -187,11 +191,200 @@ describe('Auth and email smoke flow (e2e)', () => {
       .set('Authorization', `Bearer ${refreshBody.data.accessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        const response = body as ApiBody<{ notifications: unknown[] }>;
+        const response = body as ApiBody<{
+          notifications: Array<{ id: string; readAt: string | null }>;
+        }> & {
+          pagination: { total: number };
+        };
         expect(response.status).toBe('success');
         expect(response.message).toBe('Notifications retrieved successfully');
         expect(Array.isArray(response.data.notifications)).toBe(true);
+        expect(response.pagination.total).toBeGreaterThanOrEqual(1);
       });
+
+    const unreadCountResponse = await request(app.getHttpServer())
+      .get('/api/v1/notifications/unread-count')
+      .set('Authorization', `Bearer ${refreshBody.data.accessToken}`)
+      .expect(200);
+    const unreadCountBody = unreadCountResponse.body as ApiBody<{
+      unreadCount: number;
+    }>;
+    expect(unreadCountBody.status).toBe('success');
+    expect(unreadCountBody.message).toBe(
+      'Unread notifications count retrieved successfully',
+    );
+    expect(unreadCountBody.data.unreadCount).toBeGreaterThanOrEqual(1);
+
+    const unreadNotificationsResponse = await request(app.getHttpServer())
+      .get('/api/v1/notifications?isRead=false')
+      .set('Authorization', `Bearer ${refreshBody.data.accessToken}`)
+      .expect(200);
+    const unreadNotificationsBody =
+      unreadNotificationsResponse.body as ApiBody<{
+        notifications: Array<{ id: string; readAt: string | null }>;
+      }>;
+    expect(unreadNotificationsBody.data.notifications.length).toBeGreaterThan(
+      0,
+    );
+    const notificationId = unreadNotificationsBody.data.notifications[0].id;
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/notifications/${notificationId}/read`)
+      .set('Authorization', `Bearer ${refreshBody.data.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{ updatedCount: number }>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe(
+          'Notification marked as read successfully',
+        );
+        expect(response.data.updatedCount).toBe(1);
+      });
+
+    await request(app.getHttpServer())
+      .patch('/api/v1/notifications/read-all')
+      .set('Authorization', `Bearer ${refreshBody.data.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{ updatedCount: number }>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe(
+          'Notifications marked as read successfully',
+        );
+        expect(response.data.updatedCount).toBeGreaterThanOrEqual(0);
+      });
+
+    await request(app.getHttpServer())
+      .patch('/api/v1/users/change-password')
+      .set('Authorization', `Bearer ${refreshBody.data.accessToken}`)
+      .send({
+        currentPassword: testUser.password,
+        newPassword: changedPassword,
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<null>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('Password changed successfully');
+      });
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: testUser.email, password: testUser.password })
+      .expect(401);
+
+    const changedLoginResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: testUser.email, password: changedPassword })
+      .expect(201);
+    const changedLoginBody = changedLoginResponse.body as ApiBody<AuthData>;
+    expect(changedLoginBody.status).toBe('success');
+    expect(changedLoginBody.data.accessToken).toEqual(expect.any(String));
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/forgot-password')
+      .send({ email: testUser.email })
+      .expect(201)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{ email: string; expiresIn: string }>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('Password reset OTP sent successfully');
+        expect(response.data.email).toBe(testUser.email);
+      });
+
+    const passwordResetEmail = [...capturedEmails]
+      .reverse()
+      .find(
+        (email) =>
+          email.to === testUser.email &&
+          email.subject === 'Trash4Cash Password Reset',
+      );
+    const passwordResetOtp = passwordResetEmail?.html.match(/\b\d{6}\b/)?.[0];
+    expect(passwordResetOtp).toBeDefined();
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/reset-password')
+      .send({
+        email: testUser.email,
+        otp: passwordResetOtp,
+        newPassword: resetPassword,
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        const response = body as ApiBody<null>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('Password reset successfully');
+      });
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: testUser.email, password: changedPassword })
+      .expect(401);
+
+    const resetLoginResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: testUser.email, password: resetPassword })
+      .expect(201);
+    const resetLoginBody = resetLoginResponse.body as ApiBody<AuthData>;
+    expect(resetLoginBody.status).toBe('success');
+    expect(resetLoginBody.data.accessToken).toEqual(expect.any(String));
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/pin/forgot')
+      .set('Authorization', `Bearer ${resetLoginBody.data.accessToken}`)
+      .expect(201)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{ email: string; expiresIn: string }>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('PIN reset OTP sent successfully');
+        expect(response.data.email).toBe(testUser.email);
+      });
+
+    const pinResetEmail = [...capturedEmails]
+      .reverse()
+      .find(
+        (email) =>
+          email.to === testUser.email &&
+          email.subject === 'Trash4Cash Transaction PIN Reset',
+      );
+    const pinResetOtp = pinResetEmail?.html.match(/\b\d{6}\b/)?.[0];
+    expect(pinResetOtp).toBeDefined();
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/pin/reset')
+      .set('Authorization', `Bearer ${resetLoginBody.data.accessToken}`)
+      .send({ otp: pinResetOtp, newPin: resetPin })
+      .expect(201)
+      .expect(({ body }) => {
+        const response = body as ApiBody<null>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('Transaction PIN reset successfully');
+      });
+
+    const userWithResetPin = await prisma.user.findUniqueOrThrow({
+      where: { email: testUser.email },
+      select: { transactionPinHash: true },
+    });
+    expect(
+      await compare(resetPin, userWithResetPin.transactionPinHash ?? ''),
+    ).toBe(true);
+
+    await request(app.getHttpServer())
+      .delete('/api/v1/users/me')
+      .set('Authorization', `Bearer ${resetLoginBody.data.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<null>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('Account deleted successfully');
+      });
+
+    await expect(
+      prisma.user.findUniqueOrThrow({
+        where: { email: testUser.email },
+        select: { isActive: true, pushToken: true },
+      }),
+    ).resolves.toEqual({ isActive: false, pushToken: null });
   });
 
   async function cleanupTestData() {

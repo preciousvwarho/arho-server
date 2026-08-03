@@ -10,6 +10,8 @@ import { LoginDto } from './dto/login.dto';
 import { CreatePinDto, UpdatePinDto } from './dto/pin.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
+import { ResetPinDto } from './dto/reset-pin.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -55,6 +57,26 @@ export class AuthController {
     };
   }
 
+  @Post('forgot-password')
+  @Throttle({ default: { limit: 3, ttl: 10 * 60 * 1000 } })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return {
+      status: 'success',
+      message: 'Password reset OTP sent successfully',
+      data: await this.auth.forgotPassword(dto),
+    };
+  }
+
+  @Post('reset-password')
+  @Throttle({ default: { limit: 5, ttl: 10 * 60 * 1000 } })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return {
+      status: 'success',
+      message: 'Password reset successfully',
+      data: await this.auth.resetPassword(dto),
+    };
+  }
+
   @Post('logout')
   async logout(@Body() dto: RefreshTokenDto) {
     return {
@@ -83,6 +105,30 @@ export class AuthController {
       status: 'success',
       message: 'Transaction PIN updated successfully',
       data: await this.auth.updatePin(user.sub, dto),
+    };
+  }
+
+  @Post('pin/forgot')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 3, ttl: 10 * 60 * 1000 } })
+  async forgotPin(@CurrentUser() user: JwtPayload) {
+    return {
+      status: 'success',
+      message: 'PIN reset OTP sent successfully',
+      data: await this.auth.forgotPin(user.sub),
+    };
+  }
+
+  @Post('pin/reset')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 10 * 60 * 1000 } })
+  async resetPin(@CurrentUser() user: JwtPayload, @Body() dto: ResetPinDto) {
+    return {
+      status: 'success',
+      message: 'Transaction PIN reset successfully',
+      data: await this.auth.resetPin(user.sub, dto),
     };
   }
 }

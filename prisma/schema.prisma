@@ -62,6 +62,19 @@ enum NotificationType {
   PICKUP_ARRIVAL
 }
 
+enum OtpPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  PIN_RESET
+}
+
+enum ReferralStatus {
+  PENDING
+  COMPLETED
+  REWARDED
+  CANCELLED
+}
+
 type Geometry {
   type        String
   coordinates Float[]
@@ -89,6 +102,7 @@ model User {
   isActive            Boolean          @default(true)
   pushToken           String?
   pushNotificationsEnabled Boolean      @default(true)
+  referralCode        String?
   lastLoginAt         DateTime?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
@@ -98,11 +112,32 @@ model User {
   transactions        Transaction[]
   refreshSessions     RefreshSession[]
   notifications       Notification[]
+  referralsMade       Referral[]       @relation("ReferralReferrer")
+  referralSource      Referral?        @relation("ReferralReferred")
 
   @@index([role])
   @@index([isActive])
   @@index([pushToken])
+  @@index([referralCode])
   @@map("users")
+}
+
+model Referral {
+  id             String         @id @default(auto()) @map("_id") @db.ObjectId
+  referrerId     String         @db.ObjectId
+  referredUserId String         @unique @db.ObjectId
+  referralCode   String
+  status         ReferralStatus @default(COMPLETED)
+  rewardPoints   Int?
+  rewardedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  referrer       User           @relation("ReferralReferrer", fields: [referrerId], references: [id])
+  referredUser   User           @relation("ReferralReferred", fields: [referredUserId], references: [id])
+
+  @@index([referrerId, status])
+  @@index([referralCode])
+  @@map("referrals")
 }
 
 model RefreshSession {
@@ -293,12 +328,13 @@ model Notification {
 model EmailVerification {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   email     String
+  purpose   OtpPurpose @default(EMAIL_VERIFICATION)
   otpHash   String
   expiresAt DateTime
   attempts  Int      @default(0)
   createdAt DateTime @default(now())
 
-  @@index([email])
+  @@index([email, purpose])
   @@index([expiresAt])
   @@map("emailverifications")
 }

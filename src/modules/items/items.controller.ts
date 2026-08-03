@@ -46,10 +46,26 @@ export class ItemsController {
   @Get()
   @ApiOperation({ summary: 'List recyclable item types' })
   async list(@Query() query: ListItemsQuery) {
+    const result = await this.items.list(query);
     return {
       status: 'success',
       message: 'Recyclable items retrieved successfully',
-      data: await this.items.list(query),
+      data: { items: result.items },
+      pagination: result.pagination,
+    };
+  }
+
+  @Get('recycle-categories')
+  @ApiOperation({
+    summary: 'Mobile: list recycle categories for the home screen',
+  })
+  async listRecycleCategories(@Query() query: ListItemsQuery) {
+    const result = await this.items.listRecycleCategories(query);
+    return {
+      status: 'success',
+      message: 'Recycle categories retrieved successfully',
+      data: { categories: result.categories },
+      pagination: result.pagination,
     };
   }
 

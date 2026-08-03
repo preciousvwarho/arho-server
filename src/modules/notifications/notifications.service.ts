@@ -92,11 +92,13 @@ export class NotificationsService {
   }
 
   async listMine(userId: string, query: ListNotificationsQuery) {
-    const where = {
+    const where: Prisma.NotificationWhereInput = {
       userId,
       ...(query.type ? { type: query.type } : {}),
       ...(query.isRead !== undefined
-        ? { readAt: query.isRead ? { not: null } : null }
+        ? query.isRead
+          ? { readAt: { not: null } }
+          : { OR: [{ readAt: null }, { readAt: { isSet: false } }] }
         : {}),
     };
 
@@ -117,16 +119,37 @@ export class NotificationsService {
   }
 
   markRead(userId: string, id: string) {
-    return this.prisma.notification.updateMany({
-      where: { id, userId, readAt: null },
-      data: { readAt: new Date() },
-    });
+    return this.prisma.notification
+      .updateMany({
+        where: {
+          id,
+          userId,
+          OR: [{ readAt: null }, { readAt: { isSet: false } }],
+        },
+        data: { readAt: new Date() },
+      })
+      .then((result) => ({ updatedCount: result.count }));
   }
 
   markAllRead(userId: string) {
-    return this.prisma.notification.updateMany({
-      where: { userId, readAt: null },
-      data: { readAt: new Date() },
+    return this.prisma.notification
+      .updateMany({
+        where: {
+          userId,
+          OR: [{ readAt: null }, { readAt: { isSet: false } }],
+        },
+        data: { readAt: new Date() },
+      })
+      .then((result) => ({ updatedCount: result.count }));
+  }
+
+  async unreadCount(userId: string) {
+    const unreadCount = await this.prisma.notification.count({
+      where: {
+        userId,
+        OR: [{ readAt: null }, { readAt: { isSet: false } }],
+      },
     });
+    return { unreadCount };
   }
 }

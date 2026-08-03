@@ -38,4 +38,10 @@ export class RegisterDto {
   @IsOptional()
   @IsMongoId()
   stateId?: string;
+
+  @ApiPropertyOptional({ example: 'T4C8F3A1B2' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  referralCode?: string;
 }

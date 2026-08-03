@@ -39,7 +39,7 @@ export class DepositsController {
   @Post()
   @UseInterceptors(FileInterceptor('image', imageUploadOptions))
   @ApiConsumes('multipart/form-data', 'application/json')
-  @ApiOperation({ summary: 'Submit a recyclable item pickup request' })
+  @ApiOperation({ summary: 'Mobile: submit doorstep pickup/deposit request' })
   @ApiBody({
     schema: {
       type: 'object',
@@ -89,10 +89,12 @@ export class DepositsController {
     @CurrentUser() user: JwtPayload,
     @Query() query: ListDepositsQuery,
   ) {
+    const result = await this.deposits.listMine(user.sub, query);
     return {
       status: 'success',
       message: 'Deposit requests retrieved successfully',
-      data: await this.deposits.listMine(user.sub, query),
+      data: { deposits: result.deposits },
+      pagination: result.pagination,
     };
   }
 

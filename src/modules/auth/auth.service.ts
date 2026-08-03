@@ -6,17 +6,20 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, OtpPurpose, ReferralStatus } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { compare, hash } from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import { EmailService } from '../../email/email.service';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EmailVerificationService } from '../email-verification/email-verification.service';
 import { CreatePinDto, UpdatePinDto } from './dto/pin.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
+import { ResetPinDto } from './dto/reset-pin.dto';
 
 type RefreshTokenPayload = {
   sub: string;
@@ -36,6 +39,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly email: EmailService,
     private readonly notifications: NotificationsService,
+    private readonly emailVerification: EmailVerificationService,
   ) {
     this.googleClient = new OAuth2Client(
       config.get<string>('GOOGLE_CLIENT_ID'),
@@ -53,19 +57,52 @@ export class AuthService {
       );
     }
 
-    const { password, ...profile } = dto;
-    const user = await this.prisma.user.create({
-      data: {
-        ...profile,
-        email,
-        passwordHash: await this.hashSecret(password),
-      },
+    const { password, referralCode: providedReferralCode, ...profile } = dto;
+    const normalizedReferralCode = providedReferralCode?.trim().toUpperCase();
+    const referrer = normalizedReferralCode
+      ? await this.prisma.user.findFirst({
+          where: { referralCode: normalizedReferralCode, isActive: true },
+          select: { id: true, referralCode: true },
+        })
+      : null;
+    if (normalizedReferralCode && !referrer) {
+      throw new BadRequestException('Invalid referral code');
+    }
+
+    const [passwordHash, userReferralCode] = await Promise.all([
+      this.hashSecret(password),
+      this.generateReferralCode(),
+    ]);
+    const user = await this.prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          ...profile,
+          email,
+          referralCode: userReferralCode,
+          passwordHash,
+        },
+      });
+
+      if (referrer) {
+        await tx.referral.create({
+          data: {
+            referrerId: referrer.id,
+            referredUserId: createdUser.id,
+            referralCode: referrer.referralCode ?? normalizedReferralCode!,
+            status: ReferralStatus.COMPLETED,
+          },
+        });
+      }
+
+      return createdUser;
     });
 
     await Promise.all([
-      this.sendWelcomeEmail(user.email, user.fullName).catch((error: unknown) => {
-        console.error('Unable to send welcome email', error);
-      }),
+      this.sendWelcomeEmail(user.email, user.fullName).catch(
+        (error: unknown) => {
+          console.error('Unable to send welcome email', error);
+        },
+      ),
       this.notifications.notifyUserSafely({
         userId: user.id,
         type: NotificationType.WELCOME,
@@ -173,6 +210,49 @@ export class AuthService {
     return null;
   }
 
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const email = dto.email.toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (user?.isActive) {
+      await this.emailVerification.sendPurposeOtp({
+        email,
+        fullName: user.fullName,
+        purpose: OtpPurpose.PASSWORD_RESET,
+        subject: 'Trash4Cash Password Reset',
+        heading: 'Password Reset',
+        intro: 'Use this OTP to reset your password:',
+      });
+    }
+
+    return { email, expiresIn: '10 minutes' };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const email = dto.email.toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user?.isActive) {
+      throw new UnauthorizedException('Invalid password reset request');
+    }
+
+    await this.emailVerification.verifyPurposeOtp({
+      email,
+      otp: dto.otp,
+      purpose: OtpPurpose.PASSWORD_RESET,
+    });
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await this.hashSecret(dto.newPassword) },
+      }),
+      this.prisma.refreshSession.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    return null;
+  }
+
   async createPin(userId: string, dto: CreatePinDto) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -209,6 +289,52 @@ export class AuthService {
     return null;
   }
 
+  async forgotPin(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { email: true, fullName: true, isActive: true },
+    });
+    if (!user.isActive) {
+      throw new UnauthorizedException('User account is not available');
+    }
+
+    await this.emailVerification.sendPurposeOtp({
+      email: user.email,
+      fullName: user.fullName,
+      purpose: OtpPurpose.PIN_RESET,
+      subject: 'Trash4Cash Transaction PIN Reset',
+      heading: 'Transaction PIN Reset',
+      intro: 'Use this OTP to reset your transaction PIN:',
+    });
+
+    return { email: user.email, expiresIn: '10 minutes' };
+  }
+
+  async resetPin(userId: string, dto: ResetPinDto) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { email: true, isActive: true },
+    });
+    if (!user.isActive) {
+      throw new UnauthorizedException('User account is not available');
+    }
+
+    await this.emailVerification.verifyPurposeOtp({
+      email: user.email,
+      otp: dto.otp,
+      purpose: OtpPurpose.PIN_RESET,
+    });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        transactionPinHash: await this.hashSecret(dto.newPin),
+        registrationStage: 2,
+      },
+    });
+
+    return null;
+  }
+
   async verifyPin(userId: string, pin: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -236,6 +362,7 @@ export class AuthService {
         email: true,
         phoneNumber: true,
         pointBalance: true,
+        referralCode: true,
         registrationStage: true,
         role: true,
         isEmailVerified: true,
@@ -252,6 +379,21 @@ export class AuthService {
       value,
       Number(this.config.get<string>('BCRYPT_SALT_ROUNDS') || 12),
     );
+  }
+
+  private async generateReferralCode() {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const referralCode = `T4C${randomBytes(4).toString('hex').toUpperCase()}`;
+      const existing = await this.prisma.user.findFirst({
+        where: { referralCode },
+        select: { id: true },
+      });
+      if (!existing) {
+        return referralCode;
+      }
+    }
+
+    throw new Error('Unable to generate a unique referral code');
   }
 
   private async createRefreshToken(userId: string) {

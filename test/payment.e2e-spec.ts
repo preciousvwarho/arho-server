@@ -51,12 +51,16 @@ describe('Payment smoke flow (e2e)', () => {
         content: { transactions: { status: 'delivered' } },
       }),
       getVtpassVariations: jest.fn().mockResolvedValue([]),
-      getFlutterwaveBanks: jest.fn().mockResolvedValue({ status: 'success', data: [] }),
+      getFlutterwaveBanks: jest
+        .fn()
+        .mockResolvedValue({ status: 'success', data: [] }),
       resolveFlutterwaveAccount: jest.fn().mockResolvedValue({
         account_name: 'Smoke User',
         account_number: '0123456789',
       }),
-      createFlutterwaveTransfer: jest.fn().mockResolvedValue({ status: 'success' }),
+      createFlutterwaveTransfer: jest
+        .fn()
+        .mockResolvedValue({ status: 'success' }),
     };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -156,7 +160,9 @@ describe('Payment smoke flow (e2e)', () => {
         },
       }),
     ).resolves.toEqual(
-      expect.objectContaining({ balanceAfter: startingBalance - airtimeAmount }),
+      expect.objectContaining({
+        balanceAfter: startingBalance - airtimeAmount,
+      }),
     );
 
     const notification = await prisma.notification.findFirstOrThrow({
@@ -169,6 +175,81 @@ describe('Payment smoke flow (e2e)', () => {
         type: 'AIRTIME',
       }),
     );
+
+    await request(app.getHttpServer())
+      .get('/api/v1/users/activities?page=1&limit=10')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          activities: Array<{
+            id: string;
+            type: string;
+            title: string;
+            amount: number;
+            status: string;
+            statusLabel: string;
+            reference: string;
+          }>;
+        }> & {
+          pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            pages: number;
+          };
+        };
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('User activities retrieved successfully');
+        expect(response.pagination).toEqual({
+          page: 1,
+          limit: 10,
+          total: 1,
+          pages: 1,
+        });
+        expect(response.data.activities).toContainEqual(
+          expect.objectContaining({
+            id: airtimeBody.data.transaction.id,
+            type: 'AIRTIME',
+            title: 'Airtime purchase',
+            amount: airtimeAmount,
+            status: 'COMPLETED',
+            statusLabel: 'Successful',
+          }),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .get('/api/v1/transactions?page=1&limit=10')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          transactions: Array<{ id: string; type: string; amount: number }>;
+        }> & {
+          pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            pages: number;
+          };
+        };
+        expect(response.status).toBe('success');
+        expect(response.message).toBe('Transactions retrieved successfully');
+        expect(response.pagination).toEqual({
+          page: 1,
+          limit: 10,
+          total: 1,
+          pages: 1,
+        });
+        expect(response.data.transactions).toContainEqual(
+          expect.objectContaining({
+            id: airtimeBody.data.transaction.id,
+            type: 'AIRTIME',
+            amount: airtimeAmount,
+          }),
+        );
+      });
   });
 
   async function cleanupTestData() {

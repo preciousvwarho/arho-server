@@ -5,6 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { OtpPurpose } from '@prisma/client';
 import { compare, hash } from 'bcryptjs';
 import { randomInt } from 'node:crypto';
 import { EmailService } from '../../email/email.service';
@@ -21,10 +22,29 @@ export class EmailVerificationService {
   ) {}
 
   async sendOtp(dto: SendOtpDto) {
-    const email = dto.email.toLowerCase();
+    return this.sendPurposeOtp({
+      email: dto.email,
+      fullName: dto.fullName,
+      purpose: OtpPurpose.EMAIL_VERIFICATION,
+      subject: 'Trash4Cash Email Verification',
+      heading: 'Email Verification',
+      intro: 'Use this OTP to verify your email address:',
+    });
+  }
+
+  async sendPurposeOtp(args: {
+    email: string;
+    purpose: OtpPurpose;
+    subject: string;
+    heading: string;
+    intro: string;
+    fullName?: string;
+  }) {
+    const email = args.email.toLowerCase();
     const existingOtp = await this.prisma.emailVerification.findFirst({
       where: {
         email,
+        purpose: args.purpose,
         expiresAt: { gt: new Date() },
       },
       orderBy: { createdAt: 'desc' },
@@ -42,10 +62,13 @@ export class EmailVerificationService {
     }
 
     const otp = this.generateOtp();
-    await this.prisma.emailVerification.deleteMany({ where: { email } });
+    await this.prisma.emailVerification.deleteMany({
+      where: { email, purpose: args.purpose },
+    });
     await this.prisma.emailVerification.create({
       data: {
         email,
+        purpose: args.purpose,
         otpHash: await hash(
           otp,
           Number(this.config.get<string>('BCRYPT_SALT_ROUNDS') || 12),
@@ -54,14 +77,35 @@ export class EmailVerificationService {
       },
     });
 
-    await this.deliverOtp(email, otp, dto.fullName);
+    await this.deliverOtp({
+      email,
+      otp,
+      fullName: args.fullName,
+      subject: args.subject,
+      heading: args.heading,
+      intro: args.intro,
+    });
     return { email, expiresIn: '10 minutes' };
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
-    const email = dto.email.toLowerCase();
+    return this.verifyPurposeOtp({
+      email: dto.email,
+      otp: dto.otp,
+      purpose: OtpPurpose.EMAIL_VERIFICATION,
+      markEmailVerified: true,
+    });
+  }
+
+  async verifyPurposeOtp(args: {
+    email: string;
+    otp: string;
+    purpose: OtpPurpose;
+    markEmailVerified?: boolean;
+  }) {
+    const email = args.email.toLowerCase();
     const otpRecord = await this.prisma.emailVerification.findFirst({
-      where: { email },
+      where: { email, purpose: args.purpose },
       orderBy: { createdAt: 'desc' },
     });
     if (!otpRecord) {
@@ -82,7 +126,7 @@ export class EmailVerificationService {
       );
     }
 
-    const valid = await compare(dto.otp, otpRecord.otpHash);
+    const valid = await compare(args.otp, otpRecord.otpHash);
     if (!valid) {
       const updated = await this.prisma.emailVerification.update({
         where: { id: otpRecord.id },
@@ -93,13 +137,19 @@ export class EmailVerificationService {
       );
     }
 
-    await this.prisma.$transaction([
-      this.prisma.user.updateMany({
-        where: { email },
-        data: { isEmailVerified: true },
-      }),
-      this.prisma.emailVerification.delete({ where: { id: otpRecord.id } }),
-    ]);
+    if (args.markEmailVerified) {
+      await this.prisma.$transaction([
+        this.prisma.user.updateMany({
+          where: { email },
+          data: { isEmailVerified: true },
+        }),
+        this.prisma.emailVerification.delete({ where: { id: otpRecord.id } }),
+      ]);
+    } else {
+      await this.prisma.emailVerification.delete({
+        where: { id: otpRecord.id },
+      });
+    }
 
     return { email, isEmailVerified: true };
   }
@@ -112,17 +162,24 @@ export class EmailVerificationService {
     return otp;
   }
 
-  private async deliverOtp(email: string, otp: string, fullName?: string) {
+  private async deliverOtp(args: {
+    email: string;
+    otp: string;
+    subject: string;
+    heading: string;
+    intro: string;
+    fullName?: string;
+  }) {
     await this.email.send({
-      to: email,
-      subject: 'Trash4Cash Email Verification',
-      fallbackMessage: `OTP for ${email}: ${otp}`,
+      to: args.email,
+      subject: args.subject,
+      fallbackMessage: `OTP for ${args.email}: ${args.otp}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-          <h2>Email Verification</h2>
-          <p>Hello ${fullName ?? 'there'},</p>
-          <p>Use this OTP to verify your email address:</p>
-          <h1 style="letter-spacing: 4px;">${otp}</h1>
+          <h2>${args.heading}</h2>
+          <p>Hello ${args.fullName ?? 'there'},</p>
+          <p>${args.intro}</p>
+          <h1 style="letter-spacing: 4px;">${args.otp}</h1>
           <p>This code expires in 10 minutes.</p>
         </div>
       `,

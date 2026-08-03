@@ -18,10 +18,12 @@ export class TransactionsController {
     @CurrentUser() user: JwtPayload,
     @Query() query: PaginationQuery,
   ) {
+    const result = await this.transactions.listMine(user.sub, query);
     return {
       status: 'success',
       message: 'Transactions retrieved successfully',
-      data: await this.transactions.listMine(user.sub, query),
+      data: { transactions: result.transactions },
+      pagination: result.pagination,
     };
   }
 

@@ -1,8 +1,18 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import type { JwtPayload } from '../../common/types/authenticated-request';
+import { PaginationQuery } from '../../common/types/pagination';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { PushNotificationsDto } from './dto/push-notifications.dto';
 import { PushTokenDto } from './dto/push-token.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -24,6 +34,29 @@ export class UsersController {
     };
   }
 
+  @Get('dashboard')
+  async getDashboard(@CurrentUser() user: JwtPayload) {
+    return {
+      status: 'success',
+      message: 'User dashboard retrieved successfully',
+      data: { dashboard: await this.users.getDashboard(user.sub) },
+    };
+  }
+
+  @Get('activities')
+  async getActivities(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: PaginationQuery,
+  ) {
+    const result = await this.users.getActivities(user.sub, query);
+    return {
+      status: 'success',
+      message: 'User activities retrieved successfully',
+      data: { activities: result.activities },
+      pagination: result.pagination,
+    };
+  }
+
   @Patch('me')
   async updateMe(
     @CurrentUser() user: JwtPayload,
@@ -33,6 +66,27 @@ export class UsersController {
       status: 'success',
       message: 'User profile updated successfully',
       data: { user: await this.users.updateProfile(user.sub, dto) },
+    };
+  }
+
+  @Patch('change-password')
+  async changePassword(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return {
+      status: 'success',
+      message: 'Password changed successfully',
+      data: await this.users.changePassword(user.sub, dto),
+    };
+  }
+
+  @Delete('me')
+  async deleteMe(@CurrentUser() user: JwtPayload) {
+    return {
+      status: 'success',
+      message: 'Account deleted successfully',
+      data: await this.users.deleteAccount(user.sub),
     };
   }
 

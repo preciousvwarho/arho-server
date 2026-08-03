@@ -88,10 +88,12 @@ export class AdminsController {
   @Permissions(AdminPermission.MANAGE_ADMINS)
   @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
   async listAdmins(@Query() query: PaginationQuery) {
+    const result = await this.admins.listAdmins(query);
     return {
       status: 'success',
       message: 'Admins retrieved successfully',
-      data: await this.admins.listAdmins(query),
+      data: { admins: result.admins },
+      pagination: result.pagination,
     };
   }
 
@@ -151,10 +153,12 @@ export class AdminsController {
   @Permissions(AdminPermission.MANAGE_USERS)
   @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
   async listUsers(@Query() query: ListUsersQuery) {
+    const result = await this.admins.listUsers(query);
     return {
       status: 'success',
       message: 'Users retrieved successfully',
-      data: await this.admins.listUsers(query),
+      data: { users: result.users },
+      pagination: result.pagination,
     };
   }
 
@@ -187,10 +191,12 @@ export class AdminsController {
   @Permissions(AdminPermission.MANAGE_DEPOSITS)
   @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
   async listDeposits(@Query() query: PaginationQuery) {
+    const result = await this.admins.listDeposits(query);
     return {
       status: 'success',
       message: 'Deposit requests retrieved successfully',
-      data: await this.admins.listDeposits(query),
+      data: { deposits: result.deposits },
+      pagination: result.pagination,
     };
   }
 
