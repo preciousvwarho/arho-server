@@ -24,6 +24,11 @@ export class DepositsService {
         'Provide a pickup area or a custom location',
       );
     }
+    if (dto.preferredPickupAt && dto.preferredPickupAt <= new Date()) {
+      throw new BadRequestException(
+        'Preferred pickup date must be in the future',
+      );
+    }
     const imageUrl = uploadedImage?.url ?? dto.imageUrl;
     const imageId = uploadedImage?.publicId ?? dto.imageId;
     if (!imageUrl) {
@@ -44,6 +49,7 @@ export class DepositsService {
         pointValue: item.pointValue,
         imageUrl,
         imageId,
+        preferredPickupAt: dto.preferredPickupAt,
       },
       include: { item: true, location: true },
     });

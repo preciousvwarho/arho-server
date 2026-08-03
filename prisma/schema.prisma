@@ -29,7 +29,9 @@ enum AdminPermission {
 
 enum DepositStatus {
   PENDING
+  SCHEDULED
   IN_PROGRESS
+  PICKED_UP
   REJECTED
   CREDITED
 }
@@ -268,6 +270,7 @@ model DepositRequest {
   imageId        String?
   status         DepositStatus   @default(PENDING)
   adminNote      String?
+  preferredPickupAt DateTime?
   scheduledPickupAt DateTime?
   pickupArrivedAt DateTime?
   processedById  String?         @db.ObjectId
@@ -281,6 +284,7 @@ model DepositRequest {
 
   @@index([userId, status])
   @@index([status, createdAt])
+  @@index([preferredPickupAt])
   @@index([scheduledPickupAt])
   @@map("depositrequests")
 }

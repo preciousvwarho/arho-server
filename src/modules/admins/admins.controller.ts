@@ -243,6 +243,18 @@ export class AdminsController {
     };
   }
 
+  @Patch('deposits/:id/picked-up')
+  @ApiBearerAuth()
+  @Permissions(AdminPermission.MANAGE_DEPOSITS)
+  @UseGuards(AdminJwtAuthGuard, PermissionsGuard)
+  async markPickedUp(@Param('id') id: string) {
+    return {
+      status: 'success',
+      message: 'Pickup marked as picked up successfully',
+      data: { deposit: await this.admins.markPickedUp(id) },
+    };
+  }
+
   @Post('notifications/broadcast')
   @ApiBearerAuth()
   @Permissions(AdminPermission.SYSTEM_SETTINGS)

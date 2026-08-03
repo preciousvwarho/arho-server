@@ -190,7 +190,7 @@ export class AdminsService {
         const deposit = await tx.depositRequest.findUniqueOrThrow({
           where: { id },
         });
-        if (deposit.status !== 'PENDING') {
+        if (['CREDITED', 'REJECTED'].includes(deposit.status)) {
           throw new BadRequestException(
             'Deposit request has already been processed',
           );
@@ -266,7 +266,10 @@ export class AdminsService {
 
     const deposit = await this.prisma.depositRequest.update({
       where: { id },
-      data: { scheduledPickupAt: dto.scheduledPickupAt },
+      data: {
+        scheduledPickupAt: dto.scheduledPickupAt,
+        status: 'SCHEDULED',
+      },
       include: { user: true, item: true, location: true },
     });
 
@@ -297,6 +300,23 @@ export class AdminsService {
     }
 
     return deposit;
+  }
+
+  async markPickedUp(id: string) {
+    const deposit = await this.prisma.depositRequest.findUniqueOrThrow({
+      where: { id },
+    });
+    if (!['IN_PROGRESS', 'SCHEDULED'].includes(deposit.status)) {
+      throw new BadRequestException(
+        'Deposit request must be scheduled or in progress before pickup',
+      );
+    }
+
+    return this.prisma.depositRequest.update({
+      where: { id },
+      data: { status: 'PICKED_UP' },
+      include: { user: true, item: true, location: true },
+    });
   }
 
   async markPickupArrived(id: string) {

@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsDate,
   IsIn,
   IsMongoId,
   IsOptional,
@@ -47,6 +48,15 @@ export class CreateDepositDto {
   @ValidateNested()
   @Type(() => CustomLocationDto)
   customLocation?: CustomLocationDto;
+
+  @ApiPropertyOptional({
+    description: 'User preferred pickup date and time',
+    example: '2026-08-05T09:00:00.000Z',
+  })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  preferredPickupAt?: Date;
 
   @ApiPropertyOptional({ description: 'Uploaded Cloudinary image URL' })
   @IsOptional()
