@@ -151,6 +151,13 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
         referralCode: registerBody.data.user.referralCode,
       })
       .expect(201);
+    const referredLoginResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: referredUser.email, password: referredUser.password })
+      .expect(201);
+    const referredLoginBody = referredLoginResponse.body as ApiBody<AuthData>;
+    const referredUserAccessToken = referredLoginBody.data.accessToken;
+    const referredUserId = referredLoginBody.data.user.id;
 
     await expect(
       prisma.referral.findFirstOrThrow({
@@ -343,13 +350,19 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
           address: '12 Pickup Schedule Street, Lagos',
           geometry: { type: 'Point', coordinates: [3.3901, 6.5112] },
         },
+        preferredPickupAt: new Date(
+          Date.now() + 36 * 60 * 60 * 1000,
+        ).toISOString(),
         imageUrl: 'https://example.com/smoke-pickup-schedule.png',
       })
       .expect(201);
     const pickupDepositBody = pickupDepositResponse.body as ApiBody<{
-      deposit: { id: string; status: string };
+      deposit: { id: string; status: string; preferredPickupAt: string };
     }>;
     const pickupDepositId = pickupDepositBody.data.deposit.id;
+    expect(pickupDepositBody.data.deposit.preferredPickupAt).toEqual(
+      expect.any(String),
+    );
     const scheduledPickupAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
     await request(app.getHttpServer())
@@ -374,12 +387,14 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
         const response = body as ApiBody<{
           deposit: {
             id: string;
+            status: string;
             scheduledPickupAt: string;
           };
         }>;
         expect(response.status).toBe('success');
         expect(response.message).toBe('Pickup scheduled successfully');
         expect(response.data.deposit.id).toBe(pickupDepositId);
+        expect(response.data.deposit.status).toBe('SCHEDULED');
         expect(
           new Date(response.data.deposit.scheduledPickupAt).toISOString(),
         ).toBe(scheduledPickupAt.toISOString());
@@ -424,6 +439,22 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
         expect(response.data.deposit.pickupArrivedAt).toEqual(
           expect.any(String),
         );
+      });
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/admin/deposits/${pickupDepositId}/picked-up`)
+      .set('Authorization', `Bearer ${adminLoginBody.data.token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          deposit: { id: string; status: string };
+        }>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe(
+          'Pickup marked as picked up successfully',
+        );
+        expect(response.data.deposit.id).toBe(pickupDepositId);
+        expect(response.data.deposit.status).toBe('PICKED_UP');
       });
 
     const pickupArrivalNotification =
@@ -478,6 +509,72 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
       expect.objectContaining({ depositRequestId: depositId }),
     );
 
+    const referredDepositResponse = await request(app.getHttpServer())
+      .post('/api/v1/deposits')
+      .set('Authorization', `Bearer ${referredUserAccessToken}`)
+      .send({
+        itemId: item.id,
+        customLocation: {
+          address: '14 Referred User Deposit Street, Lagos',
+          geometry: { type: 'Point', coordinates: [3.3811, 6.5199] },
+        },
+        imageUrl: 'https://example.com/smoke-referred-deposit.png',
+      })
+      .expect(201);
+    const referredDepositBody = referredDepositResponse.body as ApiBody<{
+      deposit: { id: string };
+    }>;
+    const referredDepositId = referredDepositBody.data.deposit.id;
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/admin/deposits/${referredDepositId}/status`)
+      .set('Authorization', `Bearer ${adminLoginBody.data.token}`)
+      .send({ status: 'CREDITED', adminNote: 'Referral bonus smoke test' })
+      .expect(200);
+
+    const referralBonus = Math.max(1, Math.floor(item.pointValue * 0.05));
+    await expect(
+      prisma.referral.findFirstOrThrow({
+        where: { referrerId: userId, referredUserId },
+        select: { status: true, rewardPoints: true, rewardedAt: true },
+      }),
+    ).resolves.toEqual({
+      status: 'REWARDED',
+      rewardPoints: referralBonus,
+      rewardedAt: expect.any(Date),
+    });
+    await expect(
+      prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { pointBalance: true },
+      }),
+    ).resolves.toEqual({ pointBalance: item.pointValue + referralBonus });
+    await expect(
+      prisma.transaction.findFirstOrThrow({
+        where: {
+          userId,
+          amount: referralBonus,
+          description: { contains: 'Referral bonus' },
+        },
+      }),
+    ).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+
+    const referralBonusNotification =
+      await prisma.notification.findFirstOrThrow({
+        where: {
+          userId,
+          type: NotificationType.COINS_CREDITED,
+          title: 'Referral bonus credited',
+        },
+      });
+    expect(referralBonusNotification.data).toEqual(
+      expect.objectContaining({
+        referredUserId,
+        depositRequestId: referredDepositId,
+        pointValue: referralBonus,
+      }),
+    );
+
     await request(app.getHttpServer())
       .get('/api/v1/users/dashboard')
       .set('Authorization', `Bearer ${userAccessToken}`)
@@ -503,7 +600,7 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
         expect(response.status).toBe('success');
         expect(response.message).toBe('User dashboard retrieved successfully');
         expect(response.data.dashboard.wallet).toEqual({
-          coinsBalance: item.pointValue,
+          coinsBalance: item.pointValue + referralBonus,
           totalCoinsEarned: item.pointValue,
           totalRecycled: 1,
           savedCO2: null,

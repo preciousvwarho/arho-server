@@ -184,6 +184,14 @@ export class AdminsService {
           depositId: string;
         }
       | undefined;
+    let referralBonusNotification:
+      | {
+          userId: string;
+          referredUserId: string;
+          bonusPoints: number;
+          depositId: string;
+        }
+      | undefined;
 
     const updated = await this.prisma.$transaction(
       async (tx) => {
@@ -231,6 +239,57 @@ export class AdminsService {
             balanceAfter,
           },
         });
+
+        const referral = await tx.referral.findFirst({
+          where: {
+            referredUserId: user.id,
+            status: 'COMPLETED',
+            OR: [{ rewardedAt: null }, { rewardedAt: { isSet: false } }],
+          },
+          include: { referrer: true },
+        });
+        if (referral?.referrer.isActive) {
+          const bonusPoints = this.referralBonusPoints(deposit.pointValue);
+          const referrerBalanceAfter =
+            referral.referrer.pointBalance + bonusPoints;
+          await tx.user.update({
+            where: { id: referral.referrerId },
+            data: { pointBalance: referrerBalanceAfter },
+          });
+          await tx.transaction.create({
+            data: {
+              userId: referral.referrerId,
+              type: 'CREDIT',
+              status: 'COMPLETED',
+              amount: bonusPoints,
+              reference: generateReference('REFERRAL'),
+              description: `Referral bonus for ${user.fullName}'s first credited deposit`,
+              metadata: {
+                referralId: referral.id,
+                referredUserId: user.id,
+                depositRequestId: deposit.id,
+                bonusRate: 0.05,
+              },
+              balanceBefore: referral.referrer.pointBalance,
+              balanceAfter: referrerBalanceAfter,
+            },
+          });
+          await tx.referral.update({
+            where: { id: referral.id },
+            data: {
+              status: 'REWARDED',
+              rewardPoints: bonusPoints,
+              rewardedAt: new Date(),
+            },
+          });
+          referralBonusNotification = {
+            userId: referral.referrerId,
+            referredUserId: user.id,
+            bonusPoints,
+            depositId: deposit.id,
+          };
+        }
+
         creditNotification = {
           userId: user.id,
           itemName: deposit.itemName,
@@ -252,6 +311,21 @@ export class AdminsService {
           depositRequestId: creditNotification.depositId,
           itemName: creditNotification.itemName,
           pointValue: creditNotification.pointValue,
+        },
+      });
+    }
+
+    if (referralBonusNotification) {
+      await this.notifications.notifyUserSafely({
+        userId: referralBonusNotification.userId,
+        type: NotificationType.COINS_CREDITED,
+        title: 'Referral bonus credited',
+        message: `${referralBonusNotification.bonusPoints} coins have been credited from your referral bonus.`,
+        data: {
+          referredUserId: referralBonusNotification.referredUserId,
+          depositRequestId: referralBonusNotification.depositId,
+          pointValue: referralBonusNotification.bonusPoints,
+          bonusRate: 0.05,
         },
       });
     }
@@ -472,6 +546,10 @@ export class AdminsService {
           AdminPermission.VIEW_ANALYTICS,
         ];
     }
+  }
+
+  private referralBonusPoints(pointValue: number) {
+    return Math.max(1, Math.floor(pointValue * 0.05));
   }
 
   private toProfile(admin: Admin) {

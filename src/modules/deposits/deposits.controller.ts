@@ -59,6 +59,7 @@ export class DepositsController {
         image: { type: 'string', format: 'binary' },
         imageUrl: { type: 'string' },
         imageId: { type: 'string' },
+        preferredPickupAt: { type: 'string', format: 'date-time' },
       },
     },
   })

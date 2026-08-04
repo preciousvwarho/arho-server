@@ -74,7 +74,10 @@ export class UsersService {
         _count: true,
       }),
       this.prisma.referral.count({
-        where: { referrerId: id, status: ReferralStatus.COMPLETED },
+        where: {
+          referrerId: id,
+          status: { in: [ReferralStatus.COMPLETED, ReferralStatus.REWARDED] },
+        },
       }),
       this.prisma.transaction.findMany({
         where: { userId: id },
