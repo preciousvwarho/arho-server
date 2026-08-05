@@ -1,9 +1,9 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { isAxiosError } from 'axios';
 import nodemailer from 'nodemailer';
 
-type EmailProvider = 'smtp' | 'brevo';
+type EmailProvider = 'smtp' | 'brevo' | 'postmark';
 
 type SendEmailArgs = {
   to: string;
@@ -15,11 +15,16 @@ type SendEmailArgs = {
 
 @Injectable()
 export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
+
   constructor(private readonly config: ConfigService) {}
 
   async send(args: SendEmailArgs) {
     if (this.provider === 'brevo') {
       return this.sendWithBrevo(args);
+    }
+    if (this.provider === 'postmark') {
+      return this.sendWithPostmark(args);
     }
 
     return this.sendWithSmtp(args);
@@ -43,13 +48,28 @@ export class EmailService {
       auth: { user, pass: password },
     });
 
-    const result = await transporter.sendMail({
-      from: this.fromEmail,
-      to: args.to,
-      subject: args.subject,
-      html: args.html,
-      text: args.text,
-    });
+    let result: Awaited<ReturnType<typeof transporter.sendMail>>;
+    try {
+      result = await transporter.sendMail({
+        from: this.fromEmail,
+        to: args.to,
+        subject: args.subject,
+        html: args.html,
+        text: args.text,
+      });
+    } catch (error) {
+      this.logger.error(
+        `SMTP email send failed: ${JSON.stringify({
+          to: args.to,
+          subject: args.subject,
+          from: this.fromEmail,
+          error: error instanceof Error ? error.message : String(error),
+        })}`,
+      );
+      throw new InternalServerErrorException(
+        'Unable to send email at the moment',
+      );
+    }
 
     if (!result.messageId) {
       throw new InternalServerErrorException('Unable to send email');
@@ -65,26 +85,94 @@ export class EmailService {
       return;
     }
 
-    await axios.post(
-      'https://api.brevo.com/v3/smtp/email',
-      {
-        sender: {
-          name: this.config.get<string>('BREVO_USER', 'Trash4Cash'),
-          email: senderEmail,
+    try {
+      await axios.post(
+        'https://api.brevo.com/v3/smtp/email',
+        {
+          sender: {
+            name: this.config.get<string>('BREVO_USER', 'Trash4Cash'),
+            email: senderEmail,
+          },
+          to: [{ email: args.to }],
+          subject: args.subject,
+          htmlContent: args.html,
+          textContent: args.text,
         },
-        to: [{ email: args.to }],
-        subject: args.subject,
-        htmlContent: args.html,
-        textContent: args.text,
-      },
-      {
-        headers: {
-          accept: 'application/json',
-          'api-key': apiKey,
-          'content-type': 'application/json',
+        {
+          headers: {
+            accept: 'application/json',
+            'api-key': apiKey,
+            'content-type': 'application/json',
+          },
         },
-      },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Brevo email send failed: ${JSON.stringify({
+          to: args.to,
+          subject: args.subject,
+          from: senderEmail,
+          status: isAxiosError(error) ? error.response?.status : undefined,
+          response: isAxiosError(error) ? error.response?.data : undefined,
+          error: error instanceof Error ? error.message : String(error),
+        })}`,
+      );
+      throw new InternalServerErrorException(
+        'Unable to send email at the moment',
+      );
+    }
+  }
+
+  private async sendWithPostmark(args: SendEmailArgs) {
+    const serverToken = this.config.get<string>('POSTMARK_SERVER_TOKEN');
+    const senderEmail =
+      this.config.get<string>('POSTMARK_EMAIL_FROM') ?? this.fromEmail;
+
+    if (!serverToken || !senderEmail) {
+      this.logFallback(args);
+      return;
+    }
+
+    const senderName = this.config.get<string>('POSTMARK_EMAIL_FROM_NAME');
+    const messageStream = this.config.get<string>(
+      'POSTMARK_MESSAGE_STREAM',
+      'outbound',
     );
+
+    try {
+      await axios.post(
+        'https://api.postmarkapp.com/email',
+        {
+          From: senderName ? `${senderName} <${senderEmail}>` : senderEmail,
+          To: args.to,
+          Subject: args.subject,
+          HtmlBody: args.html,
+          TextBody: args.text,
+          MessageStream: messageStream,
+        },
+        {
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-Postmark-Server-Token': serverToken,
+          },
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Postmark email send failed: ${JSON.stringify({
+          to: args.to,
+          subject: args.subject,
+          from: senderEmail,
+          status: isAxiosError(error) ? error.response?.status : undefined,
+          response: isAxiosError(error) ? error.response?.data : undefined,
+          error: error instanceof Error ? error.message : String(error),
+        })}`,
+      );
+      throw new InternalServerErrorException(
+        'Unable to send email at the moment',
+      );
+    }
   }
 
   private get provider(): EmailProvider {
@@ -92,7 +180,11 @@ export class EmailService {
       .get<string>('EMAIL_PROVIDER', 'smtp')
       .toLowerCase();
 
-    return provider === 'brevo' ? 'brevo' : 'smtp';
+    if (provider === 'brevo' || provider === 'postmark') {
+      return provider;
+    }
+
+    return 'smtp';
   }
 
   private get fromEmail() {

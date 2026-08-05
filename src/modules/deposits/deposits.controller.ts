@@ -45,7 +45,10 @@ export class DepositsController {
       type: 'object',
       required: ['itemId'],
       properties: {
-        itemId: { type: 'string' },
+        itemId: {
+          type: 'string',
+          description: 'Required recyclable item ID. Use itemId, not item.',
+        },
         locationId: { type: 'string' },
         customLocation: {
           oneOf: [
@@ -68,11 +71,6 @@ export class DepositsController {
     @Body() dto: CreateDepositDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    if (typeof dto.customLocation === 'string') {
-      dto.customLocation = JSON.parse(
-        dto.customLocation,
-      ) as CreateDepositDto['customLocation'];
-    }
     const uploadedImage = file
       ? await this.uploads.uploadImage(file.buffer, 'deposit-requests')
       : undefined;

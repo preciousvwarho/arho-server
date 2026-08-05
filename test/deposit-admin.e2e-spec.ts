@@ -248,6 +248,60 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
     expect(depositBody.data.deposit.itemName).toBe(itemName);
 
     const depositId = depositBody.data.deposit.id;
+
+    await request(app.getHttpServer())
+      .post('/api/v1/deposits')
+      .set('Authorization', `Bearer ${userAccessToken}`)
+      .send({
+        item: item.id,
+        customLocation: {
+          address: '10 Wrong Payload Street, Lagos',
+          geometry: { type: 'Point', coordinates: [3.3792, 6.5244] },
+        },
+        imageUrl: 'https://example.com/wrong-field-deposit.png',
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        const response = body as ApiBody<null>;
+        expect(response.status).toBe('error');
+        expect(response.message).toContain('property item should not exist');
+        expect(response.message).toContain('itemId must be a mongodb id');
+      });
+
+    await request(app.getHttpServer())
+      .post('/api/v1/deposits')
+      .set('Authorization', `Bearer ${userAccessToken}`)
+      .field('itemId', item.id)
+      .field('locationId', '')
+      .field(
+        'customLocation',
+        JSON.stringify({
+          address: '11 Swagger Multipart Street, Lagos',
+          geometry: { type: 'Point', coordinates: [3.3792, 6.5244] },
+        }),
+      )
+      .field('image', '')
+      .field('imageUrl', 'https://example.com/swagger-deposit-image.jpg')
+      .field('imageId', '')
+      .field(
+        'preferredPickupAt',
+        new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      )
+      .expect(201)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          deposit: { id: string; status: string; preferredPickupAt: string };
+        }>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe(
+          'Deposit request submitted successfully',
+        );
+        expect(response.data.deposit.status).toBe('PENDING');
+        expect(response.data.deposit.preferredPickupAt).toEqual(
+          expect.any(String),
+        );
+      });
+
     const depositNotification = await prisma.notification.findFirstOrThrow({
       where: { userId, type: NotificationType.DEPOSIT_CREATED },
     });
