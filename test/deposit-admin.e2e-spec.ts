@@ -35,6 +35,7 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
     enqueuePushNotification: jest.Mock;
     enqueuePickupReminder: jest.Mock;
   };
+  const internalJobSecret = `internal-job-${Date.now()}`;
   const suffix = Date.now().toString().slice(-8);
   const itemName = `Smoke PET Bottle ${suffix}`;
   const adminEmail = `smoke-admin-${suffix}@example.com`;
@@ -54,6 +55,7 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
   };
 
   beforeAll(async () => {
+    process.env.INTERNAL_JOB_SECRET = internalJobSecret;
     const emailMock = {
       send: jest.fn().mockResolvedValue(undefined),
     };
@@ -523,6 +525,32 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
     expect(pickupArrivalNotification.data).toEqual(
       expect.objectContaining({ depositRequestId: pickupDepositId }),
     );
+
+    await request(app.getHttpServer())
+      .post('/api/v1/internal/jobs/pickup-reminders/run')
+      .expect(401)
+      .expect(({ body }) => {
+        const response = body as ApiBody<null>;
+        expect(response.status).toBe('error');
+        expect(response.message).toBe('Invalid internal job secret');
+      });
+
+    await request(app.getHttpServer())
+      .post('/api/v1/internal/jobs/pickup-reminders/run')
+      .set('x-internal-job-secret', internalJobSecret)
+      .expect(201)
+      .expect(({ body }) => {
+        const response = body as ApiBody<{
+          dayBeforeSent: number;
+          pickupMorningSent: number;
+        }>;
+        expect(response.status).toBe('success');
+        expect(response.message).toBe(
+          'Pickup reminder job completed successfully',
+        );
+        expect(response.data.dayBeforeSent).toEqual(expect.any(Number));
+        expect(response.data.pickupMorningSent).toEqual(expect.any(Number));
+      });
 
     const processResponse = await request(app.getHttpServer())
       .patch(`/api/v1/admin/deposits/${depositId}/status`)

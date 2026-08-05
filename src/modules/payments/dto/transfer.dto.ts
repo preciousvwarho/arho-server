@@ -16,7 +16,7 @@ export class InitiateTransferDto {
   @Min(100)
   amount: number;
 
-  @ApiPropertyOptional({ example: 'Trash4Cash wallet transfer' })
+  @ApiPropertyOptional({ example: 'Arho wallet transfer' })
   @IsOptional()
   @IsString()
   narration?: string;

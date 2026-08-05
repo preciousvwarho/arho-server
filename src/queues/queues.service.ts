@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Job, Queue, Worker } from 'bullmq';
 import { PrismaService } from '../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -21,6 +22,8 @@ type PickupReminderJob = {
   itemName: string;
 };
 
+type QueueDriver = 'redis' | 'scheduler';
+
 @Injectable()
 export class QueuesService implements OnModuleDestroy {
   private readonly logger = new Logger(QueuesService.name);
@@ -38,18 +41,28 @@ export class QueuesService implements OnModuleDestroy {
   >;
 
   constructor(
+    private readonly config: ConfigService,
     private readonly redis: RedisService,
     private readonly prisma: PrismaService,
     private readonly expoPush: ExpoPushService,
   ) {}
 
   async enqueuePushNotification(job: PushNotificationJob) {
+    if (this.driver === 'scheduler') {
+      await this.processPushNotificationData(job);
+      return;
+    }
+
     const queue = this.getPushQueue();
     await queue.add('push_notification', job);
     this.ensurePushWorker();
   }
 
   async enqueuePickupReminder(job: PickupReminderJob) {
+    if (this.driver === 'scheduler') {
+      return;
+    }
+
     const delay = new Date(job.scheduledPickupAt).getTime() - Date.now();
     if (delay <= 0) return;
 
@@ -96,14 +109,38 @@ export class QueuesService implements OnModuleDestroy {
   private async processPushNotification(
     job: Job<PushNotificationJob, void, 'push_notification'>,
   ) {
-    const tokens = await this.resolvePushTokens(job.data);
+    await this.processPushNotificationData(job.data);
+  }
+
+  async sendPickupReminderPush(
+    job: PickupReminderJob,
+    title = 'Pickup reminder',
+    body = `Your ${job.itemName} pickup is scheduled for tomorrow.`,
+  ) {
+    const tokens = await this.resolvePushTokens({ userId: job.userId });
     if (tokens.length === 0) return;
 
     await this.expoPush.sendMany({
       expoPushTokens: tokens,
-      title: job.data.title,
-      body: job.data.body,
-      data: job.data.data,
+      title,
+      body,
+      data: {
+        depositRequestId: job.depositRequestId,
+        scheduledPickupAt: job.scheduledPickupAt,
+        type: 'PICKUP_REMINDER',
+      },
+    });
+  }
+
+  private async processPushNotificationData(job: PushNotificationJob) {
+    const tokens = await this.resolvePushTokens(job);
+    if (tokens.length === 0) return;
+
+    await this.expoPush.sendMany({
+      expoPushTokens: tokens,
+      title: job.title,
+      body: job.body,
+      data: job.data,
     });
   }
 
@@ -164,19 +201,7 @@ export class QueuesService implements OnModuleDestroy {
   private async processPickupReminder(
     job: Job<PickupReminderJob, void, 'pickup_reminder'>,
   ) {
-    const tokens = await this.resolvePushTokens({ userId: job.data.userId });
-    if (tokens.length === 0) return;
-
-    await this.expoPush.sendMany({
-      expoPushTokens: tokens,
-      title: 'Pickup reminder',
-      body: `Your ${job.data.itemName} pickup is scheduled for tomorrow.`,
-      data: {
-        depositRequestId: job.data.depositRequestId,
-        scheduledPickupAt: job.data.scheduledPickupAt,
-        type: 'PICKUP_REMINDER',
-      },
-    });
+    await this.sendPickupReminderPush(job.data);
   }
 
   async onModuleDestroy() {
@@ -186,5 +211,11 @@ export class QueuesService implements OnModuleDestroy {
       this.pickupReminderWorker?.close(),
       this.pickupReminderQueue?.close(),
     ]);
+  }
+
+  private get driver(): QueueDriver {
+    return this.config.get<string>('QUEUE_DRIVER', 'scheduler') === 'redis'
+      ? 'redis'
+      : 'scheduler';
   }
 }

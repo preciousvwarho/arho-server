@@ -17,7 +17,7 @@ export class UploadsService {
     });
   }
 
-  uploadImage(buffer: Buffer, folder = 'trash4cash') {
+  uploadImage(buffer: Buffer, folder = 'arho') {
     return new Promise<UploadedImage>((resolve, reject) => {
       cloudinary.uploader
         .upload_stream(

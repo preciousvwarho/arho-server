@@ -22,7 +22,7 @@ async function bootstrap() {
   );
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Trash4Cash API')
+    .setTitle('Arho API')
     .setDescription(
       'Recycling rewards, pickup deposits, wallet transactions, and utility payment API.',
     )

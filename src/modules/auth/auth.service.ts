@@ -106,9 +106,9 @@ export class AuthService {
       this.notifications.notifyUserSafely({
         userId: user.id,
         type: NotificationType.WELCOME,
-        title: 'Welcome to Trash4Cash',
+        title: 'Welcome to Arho',
         message:
-          'Your Trash4Cash account has been created successfully. Start recycling and earning points.',
+          'Your Arho account has been created successfully. Start recycling and earning points.',
         data: { userId: user.id },
       }),
     ]);
@@ -218,7 +218,7 @@ export class AuthService {
         email,
         fullName: user.fullName,
         purpose: OtpPurpose.PASSWORD_RESET,
-        subject: 'Trash4Cash Password Reset',
+        subject: 'Arho Password Reset',
         heading: 'Password Reset',
         intro: 'Use this OTP to reset your password:',
       });
@@ -302,7 +302,7 @@ export class AuthService {
       email: user.email,
       fullName: user.fullName,
       purpose: OtpPurpose.PIN_RESET,
-      subject: 'Trash4Cash Transaction PIN Reset',
+      subject: 'Arho Transaction PIN Reset',
       heading: 'Transaction PIN Reset',
       intro: 'Use this OTP to reset your transaction PIN:',
     });
@@ -462,11 +462,11 @@ export class AuthService {
   private async sendWelcomeEmail(email: string, fullName: string) {
     await this.email.send({
       to: email,
-      subject: 'Welcome to Trash4Cash',
+      subject: 'Welcome to Arho',
       fallbackMessage: `Welcome email for ${email}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-          <h2>Welcome to Trash4Cash</h2>
+          <h2>Welcome to Arho</h2>
           <p>Hello ${fullName},</p>
           <p>Your account has been created successfully.</p>
           <p>You can now submit recyclable pickup requests and earn points.</p>

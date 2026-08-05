@@ -26,7 +26,7 @@ export class EmailVerificationService {
       email: dto.email,
       fullName: dto.fullName,
       purpose: OtpPurpose.EMAIL_VERIFICATION,
-      subject: 'Trash4Cash Email Verification',
+      subject: 'Arho Email Verification',
       heading: 'Email Verification',
       intro: 'Use this OTP to verify your email address:',
     });

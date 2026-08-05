@@ -27,13 +27,13 @@ function getAdminPassword(existingAdmin: boolean) {
   }
 
   return {
-    password: `Trash4Cash-${randomBytes(4).toString('hex')}!A1`,
+    password: `Arho-${randomBytes(4).toString('hex')}!A1`,
     generated: true,
   };
 }
 
 export async function seedAdmin(prisma: PrismaClient) {
-  const email = process.env.SEED_ADMIN_EMAIL ?? 'admin@trash4cash.local';
+  const email = process.env.SEED_ADMIN_EMAIL ?? 'admin@arho.local';
   const username = process.env.SEED_ADMIN_USERNAME ?? 'superadmin';
   const existing = await prisma.admin.findFirst({
     where: { OR: [{ email }, { username }] },

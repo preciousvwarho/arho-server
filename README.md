@@ -1,6 +1,6 @@
-# Trash4Cash API
+# Arho API
 
-Trash4Cash is a NestJS API for a recycling rewards platform. Users submit
+Arho is a NestJS API for a recycling rewards platform. Users submit
 recyclable items for pickup, administrators review each pickup request, and
 approved deposits credit a points wallet. The wallet is intended to fund
 airtime, data, cable TV, electricity, and bank transfer services.
@@ -128,7 +128,7 @@ For repeatable local credentials, add these values to `.env` before running
 the seed:
 
 ```env
-SEED_ADMIN_EMAIL=admin@trash4cash.local
+SEED_ADMIN_EMAIL=admin@arho.local
 SEED_ADMIN_USERNAME=superadmin
 SEED_ADMIN_PASSWORD=ChangeMe123!
 ```

@@ -18,7 +18,7 @@ export class CreateAdminDto {
   @MaxLength(100)
   fullName: string;
 
-  @ApiProperty({ example: 'ops@trash4cash.local' })
+  @ApiProperty({ example: 'ops@arho.local' })
   @IsEmail()
   email: string;
 

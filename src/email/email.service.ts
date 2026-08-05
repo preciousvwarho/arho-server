@@ -90,7 +90,7 @@ export class EmailService {
         'https://api.brevo.com/v3/smtp/email',
         {
           sender: {
-            name: this.config.get<string>('BREVO_USER', 'Trash4Cash'),
+            name: this.config.get<string>('BREVO_USER', 'Arho'),
             email: senderEmail,
           },
           to: [{ email: args.to }],
@@ -188,7 +188,7 @@ export class EmailService {
   }
 
   private get fromEmail() {
-    return this.config.get<string>('EMAIL_FROM', 'noreply@trash4cash.com');
+    return this.config.get<string>('EMAIL_FROM', 'noreply@arho.com');
   }
 
   private logFallback(args: SendEmailArgs) {

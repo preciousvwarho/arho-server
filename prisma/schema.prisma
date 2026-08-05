@@ -272,6 +272,8 @@ model DepositRequest {
   adminNote      String?
   preferredPickupAt DateTime?
   scheduledPickupAt DateTime?
+  dayBeforeReminderSentAt DateTime?
+  pickupMorningReminderSentAt DateTime?
   pickupArrivedAt DateTime?
   processedById  String?         @db.ObjectId
   processedAt    DateTime?

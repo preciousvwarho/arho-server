@@ -19,7 +19,7 @@ describe('AppController', () => {
       expect(appController.getHealth()).toEqual(
         expect.objectContaining({
           status: 'success',
-          message: 'Trash4Cash API is running',
+          message: 'Arho API is running',
         }),
       );
     });

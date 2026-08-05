@@ -116,7 +116,7 @@ describe('Auth and email smoke flow (e2e)', () => {
     const otpEmail = capturedEmails.find(
       (email) =>
         email.to === testUser.email &&
-        email.subject === 'Trash4Cash Email Verification',
+        email.subject === 'Arho Email Verification',
     );
     const otp = otpEmail?.html.match(/\b\d{6}\b/)?.[0];
     expect(otp).toBeDefined();
@@ -297,7 +297,7 @@ describe('Auth and email smoke flow (e2e)', () => {
       .find(
         (email) =>
           email.to === testUser.email &&
-          email.subject === 'Trash4Cash Password Reset',
+          email.subject === 'Arho Password Reset',
       );
     const passwordResetOtp = passwordResetEmail?.html.match(/\b\d{6}\b/)?.[0];
     expect(passwordResetOtp).toBeDefined();
@@ -345,7 +345,7 @@ describe('Auth and email smoke flow (e2e)', () => {
       .find(
         (email) =>
           email.to === testUser.email &&
-          email.subject === 'Trash4Cash Transaction PIN Reset',
+          email.subject === 'Arho Transaction PIN Reset',
       );
     const pinResetOtp = pinResetEmail?.html.match(/\b\d{6}\b/)?.[0];
     expect(pinResetOtp).toBeDefined();
