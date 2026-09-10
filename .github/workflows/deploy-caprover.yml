@@ -10,7 +10,8 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/ptesh-studios/trash4cash-be
+  # IMAGE_NAME: ghcr.io/ptesh-studios/trash4cash-be
+  IMAGE_NAME: ghcr.io/preciousvwarho/arho-server
 
 jobs:
   deploy:
