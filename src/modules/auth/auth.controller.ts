@@ -5,6 +5,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import type { JwtPayload } from '../../common/types/authenticated-request';
 import { AuthService } from './auth.service';
+import { FirebaseLoginDto } from './dto/firebase-login.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { CreatePinDto, UpdatePinDto } from './dto/pin.dto';
@@ -45,6 +46,16 @@ export class AuthController {
       status: 'success',
       message: 'Google login processed successfully',
       data: await this.auth.googleLogin(dto),
+    };
+  }
+
+  @Post('firebase')
+  @Throttle({ default: { limit: 5, ttl: 15 * 60 * 1000 } })
+  async firebaseLogin(@Body() dto: FirebaseLoginDto) {
+    return {
+      status: 'success',
+      message: 'Firebase login processed successfully',
+      data: await this.auth.firebaseLogin(dto),
     };
   }
 

@@ -14,6 +14,8 @@ import { EmailService } from '../../email/email.service';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailVerificationService } from '../email-verification/email-verification.service';
+import { FirebaseAuthService } from './firebase-auth.service';
+import { FirebaseLoginDto } from './dto/firebase-login.dto';
 import { CreatePinDto, UpdatePinDto } from './dto/pin.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
@@ -40,6 +42,7 @@ export class AuthService {
     private readonly email: EmailService,
     private readonly notifications: NotificationsService,
     private readonly emailVerification: EmailVerificationService,
+    private readonly firebaseAuth: FirebaseAuthService,
   ) {
     this.googleClient = new OAuth2Client(
       config.get<string>('GOOGLE_CLIENT_ID'),
@@ -167,6 +170,36 @@ export class AuthService {
         lastLoginAt: new Date(),
         isEmailVerified:
           user.isEmailVerified || Boolean(payload?.email_verified),
+      },
+    });
+    return this.authResponse(user.id);
+  }
+
+  async firebaseLogin(dto: FirebaseLoginDto) {
+    const payload = await this.firebaseAuth.verifyIdToken(dto.idToken);
+    const email = payload.email?.toLowerCase();
+    if (!email) {
+      throw new UnauthorizedException('Firebase account has no email address');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return {
+        requiresRegistration: true,
+        profile: {
+          fullName: payload.name,
+          email,
+          avatar: payload.picture,
+        },
+      };
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        lastLoginAt: new Date(),
+        isEmailVerified:
+          user.isEmailVerified || Boolean(payload.email_verified),
       },
     });
     return this.authResponse(user.id);

@@ -9,6 +9,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { EmailModule } from '../../email/email.module';
 import { EmailVerificationModule } from '../email-verification/email-verification.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { FirebaseAuthService } from './firebase-auth.service';
 
 @Module({
   imports: [
@@ -29,7 +30,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, FirebaseAuthService],
   exports: [AuthService, JwtAuthGuard],
 })
 export class AuthModule {}
