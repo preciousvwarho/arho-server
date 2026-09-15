@@ -22,6 +22,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
 import { ResetPinDto } from './dto/reset-pin.dto';
+import { VerifyOtpDto } from '../email-verification/dto/verify-otp.dto';
 
 type RefreshTokenPayload = {
   sub: string;
@@ -100,6 +101,57 @@ export class AuthService {
       return createdUser;
     });
 
+    const verification = await this.emailVerification.sendPurposeOtp({
+      email: user.email,
+      fullName: user.fullName,
+      purpose: OtpPurpose.EMAIL_VERIFICATION,
+      subject: 'Arho Email Verification',
+      heading: 'Email Verification',
+      intro: 'Use this OTP to verify your email address:',
+    });
+
+    return {
+      ...verification,
+      requiresEmailVerification: true,
+    };
+  }
+
+  async login(dto: LoginDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+    });
+    if (!user || !(await compare(dto.password, user.passwordHash))) {
+      throw new UnauthorizedException('Incorrect email or password');
+    }
+    if (!user.isActive) {
+      throw new UnauthorizedException('Your account has been deactivated');
+    }
+    if (!user.isEmailVerified) {
+      throw new UnauthorizedException(
+        'Please verify your email before logging in',
+      );
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+    return this.authResponse(user.id);
+  }
+
+  async verifyEmail(dto: VerifyOtpDto) {
+    const email = dto.email.toLowerCase();
+    await this.emailVerification.verifyPurposeOtp({
+      email,
+      otp: dto.otp,
+      purpose: OtpPurpose.EMAIL_VERIFICATION,
+      markEmailVerified: true,
+    });
+
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { email },
+    });
+
     await Promise.all([
       this.sendWelcomeEmail(user.email, user.fullName).catch(
         (error: unknown) => {
@@ -116,24 +168,6 @@ export class AuthService {
       }),
     ]);
 
-    return this.authResponse(user.id);
-  }
-
-  async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase() },
-    });
-    if (!user || !(await compare(dto.password, user.passwordHash))) {
-      throw new UnauthorizedException('Incorrect email or password');
-    }
-    if (!user.isActive) {
-      throw new UnauthorizedException('Your account has been deactivated');
-    }
-
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
     return this.authResponse(user.id);
   }
 

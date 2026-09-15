@@ -13,6 +13,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/reset-password.dto';
 import { ResetPinDto } from './dto/reset-pin.dto';
+import { VerifyOtpDto } from '../email-verification/dto/verify-otp.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -24,8 +25,18 @@ export class AuthController {
   async register(@Body() dto: RegisterDto) {
     return {
       status: 'success',
-      message: 'User registered successfully',
+      message: 'User registered successfully. Verify your email to continue.',
       data: await this.auth.register(dto),
+    };
+  }
+
+  @Post('verify-email')
+  @Throttle({ default: { limit: 10, ttl: 10 * 60 * 1000 } })
+  async verifyEmail(@Body() dto: VerifyOtpDto) {
+    return {
+      status: 'success',
+      message: 'Email verified successfully',
+      data: await this.auth.verifyEmail(dto),
     };
   }
 

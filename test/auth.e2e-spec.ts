@@ -97,21 +97,16 @@ describe('Auth and email smoke flow (e2e)', () => {
     expect(registerBody).toEqual(
       expect.objectContaining({ status: 'success' }),
     );
-    expect(registerBody.message).toBe('User registered successfully');
-    expect(registerBody.data.accessToken).toEqual(expect.any(String));
-    expect(registerBody.data.refreshToken).toEqual(expect.any(String));
-    expect(registerBody.data.user.email).toBe(testUser.email);
-
-    await request(app.getHttpServer())
-      .post('/api/v1/email/send-otp')
-      .send({ email: testUser.email, fullName: testUser.fullName })
-      .expect(201)
-      .expect(({ body }) => {
-        const response = body as ApiBody<{ email: string; expiresIn: string }>;
-        expect(response.status).toBe('success');
-        expect(response.message).toBe('OTP sent successfully');
-        expect(response.data.email).toBe(testUser.email);
-      });
+    expect(registerBody.message).toBe(
+      'User registered successfully. Verify your email to continue.',
+    );
+    expect(registerBody.data).toEqual(
+      expect.objectContaining({
+        email: testUser.email,
+        expiresIn: '10 minutes',
+        requiresEmailVerification: true,
+      }),
+    );
 
     const otpEmail = capturedEmails.find(
       (email) =>
@@ -121,19 +116,17 @@ describe('Auth and email smoke flow (e2e)', () => {
     const otp = otpEmail?.html.match(/\b\d{6}\b/)?.[0];
     expect(otp).toBeDefined();
 
-    await request(app.getHttpServer())
-      .post('/api/v1/email/verify-otp')
+    const verifyEmailResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/verify-email')
       .send({ email: testUser.email, otp })
-      .expect(201)
-      .expect(({ body }) => {
-        const response = body as ApiBody<{
-          email: string;
-          isEmailVerified: boolean;
-        }>;
-        expect(response.status).toBe('success');
-        expect(response.message).toBe('Email verified successfully');
-        expect(response.data.isEmailVerified).toBe(true);
-      });
+      .expect(201);
+
+    const verifyEmailBody = verifyEmailResponse.body as ApiBody<AuthData>;
+    expect(verifyEmailBody.status).toBe('success');
+    expect(verifyEmailBody.message).toBe('Email verified successfully');
+    expect(verifyEmailBody.data.accessToken).toEqual(expect.any(String));
+    expect(verifyEmailBody.data.refreshToken).toEqual(expect.any(String));
+    expect(verifyEmailBody.data.user.email).toBe(testUser.email);
 
     const loginResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/login')

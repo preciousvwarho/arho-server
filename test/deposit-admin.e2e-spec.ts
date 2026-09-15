@@ -126,10 +126,23 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
       .post('/api/v1/auth/register')
       .send(testUser)
       .expect(201);
-    const registerBody = registerResponse.body as ApiBody<AuthData>;
-    const userAccessToken = registerBody.data.accessToken;
-    const userId = registerBody.data.user.id;
-    expect(registerBody.data.user.referralCode).toEqual(expect.any(String));
+    const registerBody = registerResponse.body as ApiBody<{
+      email: string;
+      requiresEmailVerification: boolean;
+    }>;
+    expect(registerBody.data.requiresEmailVerification).toBe(true);
+    const createdUser = await prisma.user.update({
+      where: { email: testUser.email },
+      data: { isEmailVerified: true },
+    });
+    const userId = createdUser.id;
+    expect(createdUser.referralCode).toEqual(expect.any(String));
+    const loginResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: testUser.email, password: testUser.password })
+      .expect(201);
+    const loginBody = loginResponse.body as ApiBody<AuthData>;
+    const userAccessToken = loginBody.data.accessToken;
 
     await request(app.getHttpServer())
       .post('/api/v1/auth/register')
@@ -150,9 +163,13 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
       .post('/api/v1/auth/register')
       .send({
         ...referredUser,
-        referralCode: registerBody.data.user.referralCode,
+        referralCode: createdUser.referralCode,
       })
       .expect(201);
+    await prisma.user.update({
+      where: { email: referredUser.email },
+      data: { isEmailVerified: true },
+    });
     const referredLoginResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({ email: referredUser.email, password: referredUser.password })
@@ -168,7 +185,7 @@ describe('Deposit and admin processing smoke flow (e2e)', () => {
       }),
     ).resolves.toEqual({
       status: 'COMPLETED',
-      referralCode: registerBody.data.user.referralCode,
+      referralCode: createdUser.referralCode,
     });
 
     await request(app.getHttpServer())

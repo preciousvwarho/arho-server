@@ -99,9 +99,22 @@ describe('Payment smoke flow (e2e)', () => {
       .post('/api/v1/auth/register')
       .send(testUser)
       .expect(201);
-    const registerBody = registerResponse.body as ApiBody<AuthData>;
-    const accessToken = registerBody.data.accessToken;
-    const userId = registerBody.data.user.id;
+    const registerBody = registerResponse.body as ApiBody<{
+      email: string;
+      requiresEmailVerification: boolean;
+    }>;
+    expect(registerBody.data.requiresEmailVerification).toBe(true);
+    const user = await prisma.user.update({
+      where: { email: testUser.email },
+      data: { isEmailVerified: true },
+    });
+    const userId = user.id;
+    const loginResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: testUser.email, password: testUser.password })
+      .expect(201);
+    const loginBody = loginResponse.body as ApiBody<AuthData>;
+    const accessToken = loginBody.data.accessToken;
 
     await request(app.getHttpServer())
       .post('/api/v1/auth/pin')
